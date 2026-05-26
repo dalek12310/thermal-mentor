@@ -1,0 +1,9 @@
+{
+  "10.1038/s41586-2025-example-valid": {
+    "id": "https://openalex.org/W9999999999",
+    "title": "Example Valid Paper",
+    "publication_year": 2025,
+    "abstract_inverted_index": {"Example": [0], "abstract": [1], "text": [2]}
+  },
+  "10.xxxx/notfound_sentinel_1": null
+}

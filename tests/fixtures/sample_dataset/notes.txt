@@ -1,0 +1,9 @@
+Sample experimental notes for thermal-mentor unit tests.
+
+Experiment series A (samples a0, a2, a4, a6):
+- Property X shows monotonic decrease with dopant concentration
+- Property Y shows monotonic increase
+- Mechanical properties Z, W remain constant
+- IR emissivity at 1000C couples with thermal conductivity decrease
+
+This is a synthetic test fixture — no real research data.

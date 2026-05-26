@@ -1,0 +1,5 @@
+sample,Ta_mol_pct,lattice_param_A,sigma_RT_Scm,E_act_eV,YoungsModulus_GPa,hardness_GPa
+LLZO_Ta0,0,12.974,1.8e-4,0.42,150.2,9.81
+LLZO_Ta2,2,12.961,2.7e-4,0.38,150.8,9.79
+LLZO_Ta4,4,12.945,3.5e-4,0.34,151.1,9.85
+LLZO_Ta6,6,12.926,4.2e-4,0.31,151.5,9.87
