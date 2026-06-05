@@ -48,7 +48,7 @@ def test_existing_data_answerable_rate():
             {"experiment_id": "E1", "answerable_by": "existing_data"},
             {"experiment_id": "E2", "answerable_by": "new_experiment"},
             {"experiment_id": "E3", "answerable_by": "existing_data"},
-            {"experiment_id": "E4", "answerable_by": "dft"},
+            {"experiment_id": "E4", "answerable_by": "computation"},
         ],
     }
     rate = compute_existing_data_answerable_rate(payload)

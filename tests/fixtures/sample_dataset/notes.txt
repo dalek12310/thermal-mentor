@@ -1,4 +1,4 @@
-Sample experimental notes for thermal-mentor unit tests.
+Sample experimental notes for science-mentor unit tests.
 
 Experiment series A (samples a0, a2, a4, a6):
 - Property X shows monotonic decrease with dopant concentration

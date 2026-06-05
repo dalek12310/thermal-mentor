@@ -1,6 +1,6 @@
-# Tutorial: thermal-mentor on a Solid-State Electrolyte Doping Study
+# Tutorial: science-mentor on a Solid-State Electrolyte Doping Study
 
-This demo runs thermal-mentor's mode 0 pipeline on a synthetic but plausible dataset:
+This demo runs science-mentor's mode 0 pipeline on a synthetic but plausible dataset:
 **Ta-doped LLZO garnet electrolyte**, looking for the anomaly that
 **smaller lattice + tighter ion channel = LOWER activation energy** (counter to textbook).
 
@@ -15,7 +15,7 @@ Dataset at `examples/demo_dataset/`:
 ## Step 1 — Scan the data dir into a scaffold
 
 ```bash
-cd thermal-mentor
+cd science-mentor
 python scripts/anomaly_brief.py examples/demo_dataset --out tmp/demo_brief.json --include-text
 ```
 
@@ -44,12 +44,12 @@ we'll hand-construct the enriched payload to show what mode 0 expects:
 ```json
 {
   "mode": "data_first",
-  "scanner_manifest": { "manifest_hash": "<copy from demo_brief>" },
+  "scanner_manifest": { "cwd": "examples/demo_dataset", "manifest_hash": "<copy from demo_brief>" },
   "anomalies": [
     {
       "anomaly_id": "A1",
       "observation": "Lattice parameter DECREASES with Ta doping (0.4% across 0-6 mol%) yet ionic conductivity INCREASES 4-fold, and activation energy E_a DROPS from 0.42 to 0.31 eV.",
-      "expected_textbook": "In standard ion-hopping models, lattice contraction reduces interstitial channel width, RAISING the migration barrier. Conductivity should decrease unless carrier concentration grows fast enough to compensate.",
+      "expected_from_prior_knowledge": "In standard ion-hopping models, lattice contraction reduces interstitial channel width, RAISING the migration barrier. Conductivity should decrease unless carrier concentration grows fast enough to compensate.",
       "surprise_score": "high",
       "data_evidence": [
         {"source": "notes.md", "quote_text": "Lattice parameter decreases monotonically by 0.4%", "line_or_para": "structural"},
@@ -64,7 +64,7 @@ we'll hand-construct the enriched payload to show what mode 0 expects:
     {
       "anomaly_id": "A2",
       "observation": "Mechanical properties (E, H) effectively constant (<2% change) while ionic transport changes by 4x and E_a drops 26%.",
-      "expected_textbook": "Standard elastic-decoupling story: lattice changes that affect transport usually also affect modulus. A 0.4% lattice contraction with no modulus change suggests the disorder is local, not bulk.",
+      "expected_from_prior_knowledge": "Standard elastic-decoupling story: lattice changes that affect transport usually also affect modulus. A 0.4% lattice contraction with no modulus change suggests the disorder is local, not bulk.",
       "surprise_score": "medium",
       "data_evidence": [
         {"source": "data.csv", "quote_text": "YoungsModulus_GPa: 150.2 → 151.5 across Ta0-Ta6 (less than 1%)", "line_or_para": "performance section"}
@@ -176,4 +176,4 @@ verified vs deleted refs.
 ## Try it on your own data
 
 Replace `examples/demo_dataset/` with a folder containing your own manuscripts + CSVs,
-run Step 1, then invoke `/thermal-mentor` in Claude Code to do Step 2 interactively.
+run Step 1, then invoke `/science-mentor` in Claude Code to do Step 2 interactively.

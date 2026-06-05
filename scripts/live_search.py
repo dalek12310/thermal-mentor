@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+import sys
 import urllib.parse
 from datetime import datetime
 from pathlib import Path
@@ -19,14 +20,15 @@ import httpx
 import yaml
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]  # scripts/ -> repo root
-_CORPUS_PATH = os.environ.get("THERMAL_MENTOR_CORPUS", "")
+# SCIENCE_MENTOR_CORPUS is canonical; THERMAL_MENTOR_CORPUS kept as deprecated fallback.
+_CORPUS_PATH = os.environ.get("SCIENCE_MENTOR_CORPUS") or os.environ.get("THERMAL_MENTOR_CORPUS", "")
 RETRACTION_YAML = Path(_CORPUS_PATH) / "retraction_blacklist.yaml" if _CORPUS_PATH else None
 CACHE_DIR = _REPO_ROOT / "cache" / "openalex_abstracts"
 
 _MAILTO = os.environ.get("OPENALEX_MAILTO", "")
 USER_AGENT = (
-    f"thermal-mentor/0.1.3 (mailto:{_MAILTO})" if _MAILTO
-    else "thermal-mentor/0.1.3"
+    f"science-mentor/0.2.0 (mailto:{_MAILTO})" if _MAILTO
+    else "science-mentor/0.2.0"
 )
 DEFAULT_SINCE = "2018-01-01"
 
@@ -264,11 +266,12 @@ async def live_search(
                 sources_hit.append(display)
             return sub_hits
         except (httpx.HTTPError, httpx.TimeoutException) as e:
-            print(f"[live_search] {display} HTTP error: {type(e).__name__}: {e}")
+            # Log to STDERR — stdout is the JSON result and must stay parseable.
+            print(f"[live_search] {display} HTTP error: {type(e).__name__}: {e}", file=sys.stderr)
             return []
         except Exception as e:
             # Catch-all for unexpected errors (parsing, key errors) — log + continue
-            print(f"[live_search] {display} unexpected error: {type(e).__name__}: {e}")
+            print(f"[live_search] {display} unexpected error: {type(e).__name__}: {e}", file=sys.stderr)
             return []
 
     tasks = [asyncio.create_task(run_source(src)) for src in sources]
@@ -431,13 +434,23 @@ def build_l3_sources() -> list[L3Source]:
 
 
 def main() -> None:
-    import argparse, json
+    import argparse
+    import json
     p = argparse.ArgumentParser()
     p.add_argument("query")
     p.add_argument("--since", default=DEFAULT_SINCE)
     p.add_argument("--top-k", type=int, default=10)
     args = p.parse_args()
     out = asyncio.run(live_search(args.query, since=args.since, top_k_per_source=args.top_k))
+    # Windows consoles default to GBK and crash on Unicode in paper abstracts
+    # (e.g. the Unicode minus). Prefer UTF-8 output, same as verifier.py.
+    import sys
+    reconfigure = getattr(sys.stdout, "reconfigure", None)
+    if callable(reconfigure):
+        try:
+            reconfigure(encoding="utf-8")
+        except Exception:
+            pass
     print(json.dumps(out, indent=2, ensure_ascii=False))
 
 

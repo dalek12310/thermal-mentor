@@ -5,7 +5,7 @@ This file documents the inner-monologue rubric the mentor runs **silently** befo
 ## Inputs the mentor reads before reasoning
 
 1. `trigger_prompt` — the user's original message that invoked the skill.
-2. `tmp/data_brief.json` — Step 0 deterministic scan + LLM extraction output (files_found / central_claims / candidate_anomalies / materials_system / manuscript_stage).
+2. `tmp/data_brief.json` — Step 0 deterministic scan + LLM extraction output (files_found / central_claims / candidate_anomalies / study_system / manuscript_stage).
 
 ## Inner monologue rubric — 4 archetypes
 

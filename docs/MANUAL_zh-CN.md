@@ -1,6 +1,6 @@
-# thermal-mentor — 使用手册
+# science-mentor — 使用手册
 
-> thermal-mentor v0.1.3 完整中文手册。
+> science-mentor v0.2.0 完整中文手册。
 > 快速概览见 [README_zh-CN.md](../README_zh-CN.md)。English version: [MANUAL.md](MANUAL.md)。
 
 ## 目录
@@ -24,7 +24,7 @@
 
 ## 1. 概念总览
 
-`thermal-mentor` 是一个**装在盒子里的科研导师**。它针对一个非常具体的时刻设计:
+`science-mentor` 是一个**装在盒子里的科研导师**。它针对一个非常具体的时刻设计:
 
 - 你手里有原始实验数据和一份草稿。
 - 你不确定数据撑得起 Nature Materials, 还是只能投个普通刊。
@@ -35,11 +35,11 @@
 - **空泛鼓励** ("看起来是一篇很好的论文!") —— 没用。
 - **空泛批评** ("引用要更全, discussion 要更紧") —— 也没用。
 
-`thermal-mentor` 想干的是另一件事: **从你的数据出发**, 找到你测出来的东西和教科书预测冲突的位置, 然后从那里往前推。
+`science-mentor` 想干的是另一件事: **从你的数据出发**, 找到你测出来的东西和教科书预测冲突的位置, 然后从那里往前推。
 
 ### 1.1 反思式路由模式
 
-绝大多数 skill 一上来就问"你想让我干啥"—— 但用户嘴上说的问题, 经常错过了数据里最反直觉的那一点。`thermal-mentor` 是先扫数据, 基于看到的东西生成几个推断意图选项, **然后才问** —— 给你确认或纠正的机会。
+绝大多数 skill 一上来就问"你想让我干啥"—— 但用户嘴上说的问题, 经常错过了数据里最反直觉的那一点。`science-mentor` 是先扫数据, 基于看到的东西生成几个推断意图选项, **然后才问** —— 给你确认或纠正的机会。
 
 这个 rubric 在 `references/data-first-prompts.md` 里 (Step 1 inner-monologue rubric)。
 
@@ -47,7 +47,7 @@
 
 ```
                     +------------------+
-                    |  /thermal-mentor |
+                    |  /science-mentor |
                     +--------+---------+
                              |
                 +------------+------------+
@@ -63,7 +63,7 @@
         +-----------+ +-------------+ +-----------+
 ```
 
-- **Mode 0 (data-first)**: anomaly 枚举 -> hypothesis 枚举 -> 区分实验。Materials-science-domain-agnostic。
+- **Mode 0 (data-first)**: anomaly 枚举 -> hypothesis 枚举 -> 区分实验。mode-0 内核无领域逻辑 (当前物理/材料优先, 机制通用 —— 其他领域需配领域包)。
 - **Publication-strategy**: novelty / highlight / revision / direction / corpus query。V0.1 原 pipeline。
 - **Both**: 先 mode 0, 然后 publication 模式读 mode 0 payload 的 `mode_0_handover` 字段, 自动预填 Level-2 问句。
 
@@ -100,27 +100,27 @@ skill 直接 clone 到 Claude skills 目录:
 
 ```bash
 # Linux / macOS
-git clone https://github.com/dalek12310/thermal-mentor.git ~/.claude/skills/thermal-mentor
+git clone https://github.com/dalek12310/science-mentor.git ~/.claude/skills/science-mentor
 
 # Windows (PowerShell)
-git clone https://github.com/dalek12310/thermal-mentor.git $env:USERPROFILE\.claude\skills\thermal-mentor
+git clone https://github.com/dalek12310/science-mentor.git $env:USERPROFILE\.claude\skills\science-mentor
 ```
 
-重启 Claude Code; 调 `/thermal-mentor` 时 skill 自动激活。
+重启 Claude Code; 调 `/science-mentor` 时 skill 自动激活。
 
 验证安装:
 
 ```bash
-ls ~/.claude/skills/thermal-mentor/SKILL.md  # 应该存在
+ls ~/.claude/skills/science-mentor/SKILL.md  # 应该存在
 ```
 
-### 2.2 当 Python 库用
+### 2.2 当 Python 脚本 / CLI 工具用
 
-跑 CLI 或单测的话, editable 装:
+在 checkout 里跑 CLI 或单测的话, editable 装:
 
 ```bash
-git clone https://github.com/dalek12310/thermal-mentor.git
-cd thermal-mentor
+git clone https://github.com/dalek12310/science-mentor.git
+cd science-mentor
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -e .
@@ -136,13 +136,13 @@ pip install -e .
 pytest tests/ -v
 ```
 
-期望: `64 passed in <time>`。
+期望: `77 passed in <time>`。
 
 如果挂了:
 
 - 检查 Python 版本 (`python --version`)。
 - 检查 `pip install -e .` 是否成功 (没有 warning)。
-- 确认没有环境变量从别的项目串过来; 特别是 `unset THERMAL_MENTOR_CORPUS` 如果它指向不存在的目录。
+- 确认没有环境变量从别的项目串过来; 特别是 `unset SCIENCE_MENTOR_CORPUS` 如果它指向不存在的目录。
 - 确认 `tests/` 和 `scripts/` 都在 `sys.path` 上。`conftest.py` 帮你处理了 pytest 场景, 但 ad-hoc Python 调用要手动加 `scripts/`。
 
 ---
@@ -161,7 +161,7 @@ export OPENALEX_MAILTO="you@example.com"
 
 不设置时, 请求走匿名池: 更慢, 更多 429, 偶尔有冷启动延迟。Skill 仍然能跑, 但 DOI 核验每条 ref 会多花几秒。
 
-### 3.2 `THERMAL_MENTOR_CORPUS`
+### 3.2 `SCIENCE_MENTOR_CORPUS`
 
 本地引文 corpus 目录路径。Corpus 目录至少需要:
 
@@ -169,7 +169,7 @@ export OPENALEX_MAILTO="you@example.com"
 - `retraction_blacklist.yaml` —— 撤稿 citekey/DOI 列表, verifier 拒绝核验。
 
 ```bash
-export THERMAL_MENTOR_CORPUS="/path/to/your/local/corpus"
+export SCIENCE_MENTOR_CORPUS="/path/to/your/local/corpus"
 ```
 
 不设置时: publication-mode 本地 citekey 查询返回 `not_found`; verifier fallback 到 DOI multi-source。Mode 0 不用 corpus (它是数据驱动, 不是引用驱动), 所以不受影响。
@@ -214,7 +214,7 @@ WOS_API_KEY=wos_xxxxx
 在任意 Claude Code session 里输入:
 
 ```
-/thermal-mentor
+/science-mentor
 ```
 
 Skill 激活, 立刻跑 Step 0 (扫当前工作目录)。
@@ -232,7 +232,7 @@ Skill 激活, 立刻跑 Step 0 (扫当前工作目录)。
 典型会话长这样:
 
 ```
-你: /thermal-mentor
+你: /science-mentor
 
 Mentor: [静默扫]
         基于以上数据, 你想让我做什么?
@@ -308,7 +308,7 @@ python scripts/anomaly_brief.py /path/to/data --out tmp/data_brief.json --includ
 - `--out` —— 输出 JSON 路径。默认 `tmp/data_brief.json`。
 - `--include-text` —— 把 `.docx` / `.pdf` / `.md` / `.txt` 提取的文本一起包进去 (CLI scaffold 路径; 完整的 anomaly 提取在 mentor session 做)。
 
-CLI mode 写出来的是 *scaffold* —— `central_claims`, `candidate_anomalies`, `materials_system`, `manuscript_stage` 都留空给 mentor (LLM) 填。`data_brief_hash` 只对扫描器决定的不变量做哈希, 所以同一输入下 scaffold 和 mentor 增强版 brief 共享同一个 hash。
+CLI mode 写出来的是 *scaffold* —— `central_claims`, `candidate_anomalies`, `study_system`, `manuscript_stage` 都留空给 mentor (LLM) 填。`data_brief_hash` 只对扫描器决定的不变量做哈希, 所以同一输入下 scaffold 和 mentor 增强版 brief 共享同一个 hash。
 
 ### 5.2 `scripts/verifier.py`
 
@@ -359,7 +359,7 @@ N=1 时, 输出文件名 `<run_name>_<YYYYMMDD>.json` / `.md`。N>1 时, `<run_n
     "sampler_temperature": "<from $CLAUDE_TEMPERATURE>",
     "data_brief_hash": "<from --reproducibility-manifest>",
     "system_prompt_hash": "<sha256(SKILL.md)[:16]>",
-    "pipeline_version": "0.1.3",
+    "pipeline_version": "0.2.0",
     "run_name": "<--run-name>"
   }
 }
@@ -448,7 +448,7 @@ Mentor 读 `tmp/data_brief.json` (Step 0 生成的, 不重扫不重建)。
 {
   "anomaly_id": "A1",
   "observation": "0/2/4/6 mol% 掺杂系列里, 缺陷信号 (XPS O1s + EPR) 单调下降",
-  "expected_textbook": "异价取代教科书: 三价掺到四价位置应该 net-increase defects 来维持电荷平衡",
+  "expected_from_prior_knowledge": "异价取代教科书: 三价掺到四价位置应该 net-increase defects 来维持电荷平衡",
   "surprise_score": "high",
   "data_evidence": [
     {
@@ -483,11 +483,13 @@ Mentor 读 `tmp/data_brief.json` (Step 0 生成的, 不重扫不重建)。
 只在 Step C 用户挑 "先帮我查文献" 或 "两阶段并行" 时跑。
 
 ```bash
-# L1 (本地 corpus hybrid retrieve) —— 仅在 THERMAL_MENTOR_CORPUS 设置时
-python ~/.claude/skills/thermal-mentor/scripts/hybrid_retrieve.py "<anomaly observation>" --top-k 5
+# L1 (本地 corpus hybrid retrieve) —— 仅在 corpus bundle 脚本存在时
+if [ -n "$SCIENCE_MENTOR_CORPUS" ] && [ -f ~/.claude/skills/science-mentor/scripts/hybrid_retrieve.py ]; then
+  python ~/.claude/skills/science-mentor/scripts/hybrid_retrieve.py "<anomaly observation>" --top-k 5
+fi
 
 # L3 (在线学术搜索)
-python ~/.claude/skills/thermal-mentor/scripts/live_search.py "<anomaly observation>" --since 2018-01-01 --top-k 10
+python ~/.claude/skills/science-mentor/scripts/live_search.py "<anomaly observation>" --since 2018-01-01 --top-k 10
 ```
 
 给每条 anomaly 标 `prior_art_hits`。
@@ -547,7 +549,7 @@ python ~/.claude/skills/thermal-mentor/scripts/live_search.py "<anomaly observat
 ### 6.8 Step G —— verifier
 
 ```bash
-python ~/.claude/skills/thermal-mentor/scripts/verifier.py tmp/payload.json
+python ~/.claude/skills/science-mentor/scripts/verifier.py tmp/payload.json
 ```
 
 Mode 0 verifier 检查:
@@ -559,7 +561,7 @@ Mode 0 verifier 检查:
 ### 6.9 Step H —— 渲染 + audit log + acceptance save
 
 ```bash
-python ~/.claude/skills/thermal-mentor/scripts/run_acceptance.py \
+python ~/.claude/skills/science-mentor/scripts/run_acceptance.py \
     tmp/payload.json --mode data_first \
     --reproducibility-manifest tmp/data_brief.json \
     --run-name "<task>_v0.1.3_data_first_<date>_runN"
@@ -713,17 +715,18 @@ Mentor 把所有 Round 1 critiques 合成 bundle 发给每个 reviewer。Reviewe
 **4 个常驻源** (OpenAlex / Crossref / Semantic Scholar / DOI.org HEAD) **+ 2 个 env-gated 源** (Lens.org 需 `LENS_API_TOKEN`, Web of Science 需 `WOS_API_KEY`):
 
 ```
-OpenAlex (qps=10)  -> Crossref (qps=50, 权威)  -> Semantic Scholar (qps=1)
-                   -> [Lens.org if LENS_API_TOKEN]      -> [WoS if WOS_API_KEY]
-                   -> DOI.org HEAD (权威)
+OpenAlex (qps=10)  -> Crossref (qps=50)              -> Semantic Scholar (qps=1)
+                   -> [Lens.org if LENS_API_TOKEN]   -> [WoS if WOS_API_KEY]
+                   -> DOI.org HEAD (对"不存在"权威)
 ```
 
 源顺序固定; `_build_chain` 只根据环境变量条件性插入 Lens / WoS。
 
 ### 9.2 语义
 
-- **非权威源 `not_found`**: 继续 fallback (可能是 metadata 索引 gap)。
-- **权威源 (Crossref 或 DOI.org HEAD) `not_found`**: 确认不存在; 链终止, `status=not_found`。
+- **任何源 `found`**: 立刻返回 `verified`, 该源作为 attribution。
+- **非权威源 `not_found`**: 继续 fallback。这里**包含 Crossref**——Crossref 命中能证明"存在", 但 Crossref 未命中**不能**证明"不存在", 因为它不索引 DataCite/Zenodo/mEDRA 的 DOI。所以 Crossref 未命中只是继续往下走。
+- **DOI.org HEAD `not_found`** (唯一对"不存在"权威的源——它能解析所有注册机构): 确认不存在; 链终止, `status=not_found`。
 - **任何源 `verified`**: 立刻返回, 该源作为 attribution。
 - **所有源 raise HTTPError / TimeoutException**: 返回 `status=verifier_error`, `error_detail.all_sources_failed` 装积累的错误列表。
 
@@ -758,7 +761,7 @@ Publication-mode 的 `verifier.py` 有个 `LegacyDoiAdapter`, 把 `verify_doi_mu
 4. 没有用户明确授权前不写 Zotero SQLite。
 5. 每个 PDF 都做 header check。
 
-规则 2-3 需要 Chrome DevTools Protocol session 控一个用户已登录的真实 Edge profile。把这个嵌进 thermal-mentor 要么绕过用户认证 (违规), 要么每次调用阻塞 30-60s setup。决定: 按需懒调, **跨 session manifest 联动**。
+规则 2-3 需要 Chrome DevTools Protocol session 控一个用户已登录的真实 Edge profile。把这个嵌进 science-mentor 要么绕过用户认证 (违规), 要么每次调用阻塞 30-60s setup。决定: 按需懒调, **跨 session manifest 联动**。
 
 ### 10.2 T1 / T2 / T3 触发条件
 
@@ -828,7 +831,7 @@ T2 设计上 **不打断**。打断 session flow 让用户中途启 CARSI 的代
 HASH_PAYLOAD_KEYS = ("files_found", "scanner_manifest", "csv_summaries", "text_files_content")
 ```
 
-LLM 加工的字段 (`central_claims`, `performance_numbers`, `candidate_anomalies`, `materials_system`, `manuscript_stage`) **不算**入哈希。这些字段在相同输入下是非确定性的, 模型侧 reproducibility 通过 `reproducibility.model_id` / `system_prompt_hash` 单独捕捉。
+LLM 加工的字段 (`central_claims`, `performance_numbers`, `candidate_anomalies`, `study_system`, `manuscript_stage`) **不算**入哈希。这些字段在相同输入下是非确定性的, 模型侧 reproducibility 通过 `reproducibility.model_id` / `system_prompt_hash` 单独捕捉。
 
 为什么重要: 这个保证让 CLI scaffold 路径 (`build_data_brief_scaffold`, 确定性) 和 mentor session 完整 pipeline (`build_data_brief`, 含 LLM 加工) 在同一 cwd snapshot 下产出相同的 `data_brief_hash`。同一份数据上跑多次 acceptance 锁得齐整。
 
@@ -846,13 +849,13 @@ LLM 加工的字段 (`central_claims`, `performance_numbers`, `candidate_anomali
     "sampler_temperature": "<from $CLAUDE_TEMPERATURE, default 'default'>",
     "data_brief_hash": "<from --reproducibility-manifest>",
     "system_prompt_hash": "<sha256(SKILL.md)[:16]>",
-    "pipeline_version": "0.1.3",
+    "pipeline_version": "0.2.0",
     "run_name": "<--run-name>"
   }
 }
 ```
 
-`system_prompt_hash` 从 `SKILL.md` 算 (仓库内或装在 `~/.claude/skills/thermal-mentor/SKILL.md`)。Fallback sentinel: `"skill_md_not_found"`。
+`system_prompt_hash` 从 `SKILL.md` 算 (仓库内或装在 `~/.claude/skills/science-mentor/SKILL.md`)。Fallback sentinel: `"skill_md_not_found"`。
 
 ### 11.3 N=3 稳定性测试
 
@@ -905,14 +908,14 @@ python scripts/run_acceptance.py tmp/payload.json \
   "candidate_anomalies": [
     {"anomaly_id": "A1", "observation_short": "...",
      "observed_trend": "monotonic_decrease|monotonic_increase|non_monotonic|unknown",
-     "expected_source_type": "defect-chemistry textbook|Shannon radii|...",
+     "expectation_basis": "defect-chemistry textbook|Shannon radii|...",
      "quote_verbatim": "...", "quote_source": "notes.txt:7",
      "quote_hash": "sha256:...",
-     "expected_textbook_short": "...",
+     "expected_from_prior_knowledge_short": "...",
      "mentor_inference": "...",
      "surprise_score": "high|medium|low"}
   ],
-  "materials_system": "doped oxide series",
+  "study_system": "doped oxide series",
   "manuscript_stage": "draft|plan|data-only|mixed",
   "data_brief_hash": "sha256:...",
   "scanner_manifest": {
@@ -975,7 +978,7 @@ Mode 0 在 `both` 模式跑完时, payload 顶层带 `mode_0_handover` 字段:
     "mechanism_claim_candidates": ["..."],
     "selling_point_candidates": ["..."],
     "existing_data_assets": ["..."],
-    "materials_system": "...",
+    "study_system": "...",
     "data_brief_hash": "sha256:..."
   }
 }
@@ -994,11 +997,11 @@ Publication mode 读它, 预填 Level-2 `AskUserQuestion` 选项描述。用户�
 - CSV 报 `UnicodeDecodeError` —— 文件是 GB18030 或其他非 UTF-8。`summarize_csv` 自动 fallback (UTF-8 -> GB18030 -> Latin-1)。
 - `_llm_extract_anomalies NotImplementedError` —— 你直接调了 `build_data_brief`。CLI 场景用 `build_data_brief_scaffold`; 完整路径只给 mentor session 用。
 
-### 13.2 Skill 在 `/thermal-mentor` 没激活
+### 13.2 Skill 在 `/science-mentor` 没激活
 
-- 检查 `ls ~/.claude/skills/thermal-mentor/SKILL.md` 存在。
+- 检查 `ls ~/.claude/skills/science-mentor/SKILL.md` 存在。
 - 重启 Claude Code (skill registry 在 session 启动时加载)。
-- 检查 `SKILL.md` frontmatter 是 `name: thermal-mentor` (case-sensitive)。
+- 检查 `SKILL.md` frontmatter 是 `name: science-mentor` (case-sensitive)。
 
 ### 13.3 某个 DOI 核验卡住
 
@@ -1078,6 +1081,18 @@ def compute_<metric_name>(payload: dict) -> float:
 3. 改 `references/*.md` 和 `docs/MANUAL*.md` 里所有 slash-command 引用。
 4. 如果你把 `scripts/` 改名, 改 Python import path。
 
+### 14.5 加一个领域包 (在别的学科用本工具)
+
+内核是领域通用的; 学科相关的词汇都在 `domains/` 里。换学科:
+
+1. 把 `domains/_template.md` 复制成 `domains/<你的领域>.md`。
+2. 填四个槽: `research_directions`、`target_journals`、`preserved_terms`、`expectation_vocabulary`。
+3. 会话开始时设 `MENTOR_DOMAIN_PACK=<你的领域>` (或直接跟 mentor 说"用 `<你的领域>` 领域包")。
+
+不需要改任何代码——领域包是数据、不是逻辑。随包的 `domains/thermal.md` 是参考包;
+`domains/_template.md` 里带了生物、经济两个 worked example, 说明 anomaly → 机制 → 区分实验
+这套闭环与学科无关。详见 `domains/README.md`。
+
 ---
 
-*Manual last updated for v0.1.3.*
+*Manual last updated for v0.2.0.*

@@ -30,11 +30,9 @@ Q2: 失败容忍度？
 - 容忍 10%
 
 Q3: 目标期刊？（仅用于 ceiling estimate，放最后避免框死整个 eval）
-- Nat Mater
-- Nature Communications
-- Advanced Materials
-- JACS / ACS Nano / Nano Lett
-- 其他（自填）
+- Options come from the **active domain pack**'s `target_journals` (default `domains/thermal.md`:
+  Nat Mater / Nature Communications / Advanced Materials / JACS·ACS Nano·Nano Lett / 其他自填).
+  Swap the pack (`domains/<field>.md`) to get the right journals for another field.
 
 ### highlight
 
@@ -59,11 +57,9 @@ Q2: 目标期刊（同上，放最后避免被 framing 带偏）
 ### direction
 
 Q1: 哪个方向？
-- A: DFT phonon + ML potentials
-- B: thermoelectric
-- C: interface + 2D
-- D: topological / chiral phonon
-- E: phonon-induced superconductivity
+- Options come from the **active domain pack**'s `research_directions` (default `domains/thermal.md`:
+  A DFT phonon + ML potentials / B thermoelectric / C interface + 2D / D topological·chiral phonon /
+  E phonon-induced superconductivity). For another field, load `domains/<field>.md` instead.
 
 Q2: 时间窗口？
 - 6 个月

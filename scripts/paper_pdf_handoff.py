@@ -1,6 +1,6 @@
 """paper_pdf_handoff — manifest CSV + resume instruction for paper-pdf-acquisition skill.
 
-Spec ref: 2026-05-25-thermal-mentor-v0.1.3 Section 4.8.3
+Spec ref: 2026-05-25-science-mentor-v0.1.3 Section 4.8.3
 
 This script does NOT invoke Edge/CDP/publisher APIs. It writes a CSV manifest +
 generates a human-readable resume instruction Markdown block. The actual PDF

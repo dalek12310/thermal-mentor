@@ -1,6 +1,6 @@
 """DOI multi-source verification chain.
 
-Spec ref: 2026-05-25-thermal-mentor-v0.1.3-mode-routing-design.md Section 4.4.2
+Spec ref: 2026-05-25-science-mentor-v0.1.3-mode-routing-design.md Section 4.4.2
 """
 from __future__ import annotations
 
@@ -44,8 +44,8 @@ def normalize_doi(doi: str) -> str:
 
 _MAILTO = os.environ.get("OPENALEX_MAILTO", "")
 USER_AGENT = (
-    f"thermal-mentor/0.1.3 (mailto:{_MAILTO})" if _MAILTO
-    else "thermal-mentor/0.1.3"
+    f"science-mentor/0.2.0 (mailto:{_MAILTO})" if _MAILTO
+    else "science-mentor/0.2.0"
 )
 DEFAULT_TIMEOUT = 10.0
 
@@ -135,9 +135,17 @@ def doi_org_head(doi: str, timeout: float = DEFAULT_TIMEOUT) -> SourceLookupResu
     try:
         with httpx.Client(timeout=timeout, follow_redirects=False, headers={"User-Agent": USER_AGENT}) as cli:
             r = cli.head(url)
-            if r.status_code in (200, 301, 302):
-                return SourceLookupResult(True, {})
-            return SourceLookupResult(False, None)
+            if r.status_code in (200, 301, 302, 303, 307, 308):
+                return SourceLookupResult(True, {})  # resolves → exists
+            if r.status_code in (404, 410):
+                return SourceLookupResult(False, None)  # genuinely absent
+            # 429 / 5xx / 403 / anything unexpected: transient or unknown — do NOT
+            # assert absence (this source is the sole absence authority, so a false
+            # not_found here would be cached for 24h). Surface as verifier_error.
+            raise httpx.HTTPStatusError(
+                f"doi.org HEAD unexpected status {r.status_code}",
+                request=r.request, response=r,
+            )
     except httpx.HTTPError:
         raise
 
@@ -151,10 +159,15 @@ class Source(NamedTuple):
 def _build_chain() -> list[Source]:
     chain = [
         Source("openalex", openalex_lookup, False),
-        Source("crossref", crossref_lookup, True),   # 权威 (DOI 注册机构)
+        # Crossref is authoritative for PRESENCE (a positive hit = exists), but NOT
+        # for ABSENCE: it only indexes Crossref-registered DOIs, so a Crossref miss
+        # says nothing about DataCite/Zenodo/mEDRA DOIs. So is_authoritative_for_existence
+        # is False here — only doi.org HEAD (which resolves EVERY registration agency)
+        # is allowed to terminate the chain on a negative.
+        Source("crossref", crossref_lookup, False),
         Source("semantic_scholar", s2_lookup, False),
         Source("lens", lens_lookup, False),
-        Source("doi_head", doi_org_head, True),       # 权威 (protocol-level resolver)
+        Source("doi_head", doi_org_head, True),       # 权威 (protocol-level resolver, all agencies)
     ]
     if os.environ.get("WOS_API_KEY"):
         # WoS 插在 S2 之前作为 metadata 二次源 (非权威)
@@ -209,9 +222,11 @@ def _cache_set(doi: str, result: DoiCheckResult) -> None:
 def verify_doi_multisource(doi: str) -> DoiCheckResult:
     """Multi-source DOI verification chain with not_found semantic.
 
-    - non-authoritative source not_found → continue fallback (could be indexing gap)
-    - authoritative source (Crossref / DOI.org HEAD) not_found → confirmed absence
-    - any source verified → return verified
+    - any source found → return verified (a positive from any source is trusted)
+    - non-authoritative source not_found → continue fallback (could be indexing gap;
+      e.g. Crossref does not index DataCite/Zenodo DOIs, so its miss is not terminal)
+    - authoritative-for-absence source (DOI.org HEAD — resolves every registration
+      agency) not_found → confirmed absence, chain terminates
     - all sources raise HTTPError → verifier_error, all_sources_failed
 
     24h disk cache; verifier_error is intentionally NOT cached (transient).

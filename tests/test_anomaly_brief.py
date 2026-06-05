@@ -9,8 +9,6 @@ _SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-import pytest
-
 
 def test_scan_cwd_finds_supported_files(sample_dataset_dir):
     from anomaly_brief import scan_cwd
@@ -107,16 +105,16 @@ def test_build_data_brief_includes_hash(sample_dataset_dir, monkeypatch):
                     "anomaly_id": "A1",
                     "observation_short": "X monotonic decrease",
                     "observed_trend": "monotonic_decrease",
-                    "expected_source_type": "textbook baseline",
+                    "expectation_basis": "textbook baseline",
                     "quote_verbatim": "property X 0/2/4/6% monotonic decrease",
                     "quote_source": "notes.txt:4",
                     "quote_hash": "sha256:" + "0" * 64,
-                    "expected_textbook_short": "self-compensation predicts flat",
+                    "expected_from_prior_knowledge_short": "self-compensation predicts flat",
                     "mentor_inference": "self-compensation only explains 'no increase'",
                     "surprise_score": "high",
                 }
             ],
-            "materials_system": "doped-test-system",
+            "study_system": "doped-test-system",
             "manuscript_stage": "draft+data",
         }
 
@@ -136,7 +134,7 @@ def test_data_brief_hash_stable_for_same_input(sample_dataset_dir, monkeypatch):
         return {
             "central_claims": [], "performance_numbers": [],
             "candidate_anomalies": [{"anomaly_id": "A1", "observation_short": "stable"}],
-            "materials_system": "test", "manuscript_stage": "test",
+            "study_system": "test", "manuscript_stage": "test",
         }
     from anomaly_brief import build_data_brief
     monkeypatch.setattr("anomaly_brief._llm_extract_anomalies", fake_llm)
@@ -165,7 +163,7 @@ def test_build_data_brief_scaffold_no_llm_call(sample_dataset_dir):
     assert scaffold["central_claims"] == []
     assert scaffold["performance_numbers"] == []
     assert scaffold["candidate_anomalies"] == []
-    assert scaffold["materials_system"] == ""
+    assert scaffold["study_system"] == ""
     assert scaffold["manuscript_stage"] == ""
 
     # text_files_content empty by default (no --include-text)
@@ -212,7 +210,7 @@ def test_scaffold_and_full_brief_have_same_hash_for_same_cwd(sample_dataset_dir,
             "central_claims": [{"a": "non-empty"}],
             "performance_numbers": [{"x": 1}],
             "candidate_anomalies": [{"anomaly_id": "A1"}],
-            "materials_system": "test_system",
+            "study_system": "test_system",
             "manuscript_stage": "draft",
         }
 
@@ -246,7 +244,7 @@ def test_hash_excludes_llm_enriched_fields(sample_dataset_dir, monkeypatch):
             "central_claims": [{"claim_text": "claim A", "source_file": "x", "quote_line": 1}],
             "performance_numbers": [],
             "candidate_anomalies": [{"anomaly_id": "A1", "quote_source": "x:99"}],
-            "materials_system": "sys_A", "manuscript_stage": "draft",
+            "study_system": "sys_A", "manuscript_stage": "draft",
         }
 
     def fake_llm_b(*a, **kw):
@@ -254,7 +252,7 @@ def test_hash_excludes_llm_enriched_fields(sample_dataset_dir, monkeypatch):
             "central_claims": [{"claim_text": "claim B different", "source_file": "y", "quote_line": 2}],
             "performance_numbers": [{"x": 99}],
             "candidate_anomalies": [{"anomaly_id": "B1", "quote_source": "y:88"}],
-            "materials_system": "sys_B", "manuscript_stage": "review",
+            "study_system": "sys_B", "manuscript_stage": "review",
         }
 
     monkeypatch.setattr("anomaly_brief._llm_extract_anomalies", fake_llm_a)

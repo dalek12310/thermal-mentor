@@ -1,1 +1,1 @@
-"""Thermal mentor backend scripts."""
+"""science-mentor backend scripts."""

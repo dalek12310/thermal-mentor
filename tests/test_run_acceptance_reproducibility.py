@@ -137,3 +137,71 @@ def test_cli_fails_gracefully_on_malformed_payload(tmp_path):
     assert result.returncode == 2
     assert "not valid JSON" in result.stderr
     assert "bad_payload.json" in result.stderr
+
+
+def test_save_run_seeds_audit_log_id_into_payload(tmp_path, monkeypatch):
+    """Regression (Codex audit #5): a blank audit_log_id must be seeded INTO the
+    persisted payload and match the audit-log record (lineage)."""
+    import run_acceptance
+    import audit_log
+
+    captured = {}
+    def fake_append(record):
+        captured.update(record)
+        return record.get("audit_log_id")
+    monkeypatch.setattr(audit_log, "append", fake_append)
+
+    payload = {"mode": "data_first", "anomalies": [], "hypotheses": [],
+               "experiments": [], "audit_log_id": ""}
+    json_path, _ = run_acceptance.save_run(payload, run_name="t_lineage", out_dir=tmp_path)
+    data = json.loads(json_path.read_text(encoding="utf-8"))
+    assert data["audit_log_id"], "persisted JSON must carry a non-empty audit_log_id"
+    assert data["audit_log_id"] == captured["audit_log_id"], "JSON id must match audit record id"
+
+
+def test_save_run_verifies_before_persist(tmp_path, monkeypatch):
+    """Regression (Codex audit #2): save_run must verify the payload before writing,
+    so the persisted JSON carries verification_status (not the raw payload)."""
+    import run_acceptance
+    import audit_log
+    monkeypatch.setattr(audit_log, "append", lambda r: "aid")
+
+    payload = {
+        "mode": "data_first",
+        "anomalies": [{"anomaly_id": "A1", "observation": "o",
+                       "data_evidence": [{"source": "/no/such/file.csv", "quote_text": "q"}]}],
+        "hypotheses": [], "experiments": [], "audit_log_id": "t",
+    }
+    json_path, _ = run_acceptance.save_run(payload, run_name="t_verify", out_dir=tmp_path)
+    data = json.loads(json_path.read_text(encoding="utf-8"))
+    ev = data["anomalies"][0]["data_evidence"][0]
+    assert ev["verification_status"] == "not_found", "save_run should have verified the evidence"
+
+
+def test_save_run_aborts_if_verification_raises(tmp_path, monkeypatch):
+    """A verifier crash must not persist raw, unverified payloads."""
+    import pytest
+    import run_acceptance
+    import audit_log
+    import verifier
+
+    monkeypatch.setattr(audit_log, "append", lambda r: "aid")
+
+    def fail_verify(payload):
+        raise RuntimeError("forced verifier failure")
+
+    monkeypatch.setattr(verifier, "verify_mode_0", fail_verify)
+
+    payload = {
+        "mode": "data_first",
+        "anomalies": [{"anomaly_id": "A1", "observation": "o", "data_evidence": []}],
+        "hypotheses": [],
+        "experiments": [],
+        "audit_log_id": "t",
+    }
+
+    with pytest.raises(RuntimeError, match="forced verifier failure"):
+        run_acceptance.save_run(payload, run_name="t_verify_crash", out_dir=tmp_path)
+
+    assert list(tmp_path.glob("*.json")) == []
+    assert list(tmp_path.glob("*.md")) == []

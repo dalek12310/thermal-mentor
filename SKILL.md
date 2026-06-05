@@ -1,11 +1,11 @@
 ---
-name: thermal-mentor
-description: 科研导师助手 — 审论文创新性、找亮点、改论文、给方向, 也支持 data-first mode 0 (深挖数据 anomaly → 候选机制 → 区分实验)。Use when user invokes /thermal-mentor or mentions "thermal mentor", "审创新性", "找亮点", "改论文", "方向指点", "热学导师", "深挖数据". Multi-source DOI verification (OpenAlex / Crossref / S2 / Lens / WoS / DOI.org HEAD), JSON-first verifier, optional local corpus backed by user-supplied citekey CSV + retraction blacklist YAML. Three-level reflective ask protocol enforced.
+name: science-mentor
+description: 科研导师助手 — 审论文创新性、找亮点、改论文、给方向, 也支持 data-first mode 0 (深挖数据 anomaly → 候选机制 → 区分实验)。Use when user invokes /science-mentor or mentions "thermal mentor", "审创新性", "找亮点", "改论文", "方向指点", "热学导师", "深挖数据". Multi-source DOI verification (OpenAlex / Crossref / S2 / Lens / WoS / DOI.org HEAD), JSON-first verifier, optional local corpus backed by user-supplied citekey CSV + retraction blacklist YAML. Three-level reflective ask protocol enforced.
 ---
 
-# /thermal-mentor
+# /science-mentor
 
-A research mentor with two pipelines: (1) **publication-strategy** (novelty review, highlights, revision, direction, corpus query) and (2) **data-first mode 0** (data anomaly → candidate mechanisms → discriminating experiments). Originally designed for thermal physics / phonon / thermoelectric workflows but the mode 0 pipeline is materials-science-domain-agnostic.
+A research mentor with two pipelines: (1) **publication-strategy** (novelty review, highlights, revision, direction, corpus query) and (2) **data-first mode 0** (data anomaly → candidate mechanisms → discriminating experiments). The mode-0 *kernel* carries no domain logic — the Python backend operates on generic CSV columns, generic text, and generic DOIs. The shipped prompt examples and the publication corpus are physics / materials-science flavored, so the honest scope today is **physics / materials-first, mechanism-general**; other fields work but need a domain pack (see `references/`).
 
 Best invoked from a Claude session backed by a capable reasoning model — the mentor inner monologue is the heart of the reflective routing.
 
@@ -49,11 +49,11 @@ So Step 0 is two sub-steps:
 **Step 0a — Deterministic scan**:
 ```python
 # In the mentor session, run via Python inline or Bash:
-import sys; sys.path.insert(0, str(Path.home() / '.claude' / 'skills' / 'thermal-mentor' / 'scripts'))
+from pathlib import Path   # import BEFORE using Path.home() below
+import sys, json
+sys.path.insert(0, str(Path.home() / '.claude' / 'skills' / 'science-mentor' / 'scripts'))
 from anomaly_brief import build_scanner_manifest, summarize_csv, scan_cwd
 from manuscript_brief import read_text
-from pathlib import Path
-import json
 
 cwd = Path(r"<the cwd>")
 manifest = build_scanner_manifest(cwd)
@@ -76,8 +76,8 @@ If `manifest["files"]` is empty (0 supported files), fallback to v0.1 Level-3 in
 Given the `csv_summaries` (with `monotonic_decrease`/`increase` trends + range_ratios) and `text_files` content, YOU enumerate:
 - `central_claims`: paragraph-level claims with source file + line/para reference
 - `performance_numbers`: with values, units, verbatim quote
-- `candidate_anomalies`: 6-field schema (anomaly_id, observation_short, observed_trend, expected_source_type, quote_verbatim, quote_source, expected_textbook_short, mentor_inference, surprise_score)
-- `materials_system`, `manuscript_stage`
+- `candidate_anomalies`: 6-field schema (anomaly_id, observation_short, observed_trend, expectation_basis, quote_verbatim, quote_source, expected_from_prior_knowledge_short, mentor_inference, surprise_score)
+- `study_system`, `manuscript_stage`
 
 Save as `tmp/data_brief.json` (write via `Path("tmp/data_brief.json").write_text(json.dumps({...}, ensure_ascii=False, indent=2))`).
 
@@ -161,7 +161,7 @@ Read `tmp/data_brief.json` (do not regenerate).
 #### Step B: anomaly enumeration
 
 Promote `candidate_anomalies` to formal 6-field schema (see `references/output-schemas-data-first.md`):
-- anomaly_id, observation, expected_textbook, surprise_score, data_evidence, context_questions_to_user
+- anomaly_id, observation, expected_from_prior_knowledge, surprise_score, data_evidence, context_questions_to_user
 
 If `idea_critique_subbranch=True` (case B), skip this step — go directly to Step E.
 
@@ -194,8 +194,15 @@ AskUserQuestion (人话, NO "推荐" 标签, 中性 trade-off):
 
 If user picked "先帮我查文献" or "两阶段并行":
 ```bash
-python ~/.claude/skills/thermal-mentor/scripts/hybrid_retrieve.py "<each anomaly observation>" --top-k 5
-python ~/.claude/skills/thermal-mentor/scripts/live_search.py "<each anomaly observation>" --since 2018-01-01 --top-k 10
+# L3 live academic search — always available (no corpus needed):
+python ~/.claude/skills/science-mentor/scripts/live_search.py "<each anomaly observation>" --since 2018-01-01 --top-k 10
+
+# L1 local-corpus retrieval — ONLY when a corpus is configured AND the retriever is present.
+# hybrid_retrieve.py ships with the corpus bundle, not the public skill, so guard it:
+#   if [ -n "$SCIENCE_MENTOR_CORPUS" ] && [ -f ~/.claude/skills/science-mentor/scripts/hybrid_retrieve.py ]; then
+#     python ~/.claude/skills/science-mentor/scripts/hybrid_retrieve.py "<each anomaly observation>" --top-k 5
+#   fi
+# Otherwise skip L1 silently and rely on L3 alone.
 ```
 
 For "两阶段并行": run Step E first (without retrieval), then Step D, then a Step E2 enrichment pass.
@@ -228,7 +235,7 @@ If user picks reviewers:
 - Round 2: mentor sends round-1 critiques to each reviewer for cross-update
 - Round 3-4: 
   ```bash
-  python ~/.claude/skills/thermal-mentor/scripts/cross_review_merge.py \
+  python ~/.claude/skills/science-mentor/scripts/cross_review_merge.py \
       tmp/cross_review_round*.json --out tmp/cross_review_final.json
   ```
 - Merge result into payload
@@ -236,7 +243,7 @@ If user picks reviewers:
 #### Step G: verifier
 
 ```bash
-python ~/.claude/skills/thermal-mentor/scripts/verifier.py tmp/payload.json
+python ~/.claude/skills/science-mentor/scripts/verifier.py tmp/payload.json
 ```
 
 Mode 0 verifier (Section 2.7) verifies anomaly `data_evidence` source files exist + hypothesis `supporting_refs` DOIs via multi-source chain.
@@ -244,7 +251,7 @@ Mode 0 verifier (Section 2.7) verifies anomaly `data_evidence` source files exis
 #### Step H: render + audit log + acceptance save
 
 ```bash
-python ~/.claude/skills/thermal-mentor/scripts/run_acceptance.py \
+python ~/.claude/skills/science-mentor/scripts/run_acceptance.py \
     tmp/payload.json --mode data_first \
     --reproducibility-manifest tmp/data_brief.json \
     --run-name "<task>_v0.1.3_<mode>_<date>_runN"
@@ -269,7 +276,7 @@ Same as v0.1 SKILL.md (`Pipeline (after gates pass)` section, Steps A-H), except
 If input is `folder`, `manuscript`, or `review-pdf`:
 
 ```bash
-python ~/.claude/skills/thermal-mentor/scripts/manuscript_brief.py <path> --out tmp/brief.json
+python ~/.claude/skills/science-mentor/scripts/manuscript_brief.py <path> --out tmp/brief.json
 ```
 
 If the manuscript exceeds 4000 tokens, you (Claude) call yourself per chunk with this extraction prompt:
@@ -278,7 +285,7 @@ If the manuscript exceeds 4000 tokens, you (Claude) call yourself per chunk with
 Extract from this manuscript chunk:
 - central_claims (list of strings)
 - method_claims (list)
-- materials_system (one string)
+- study_system (one string)
 - performance_claims (list)
 - citations_used (list of citekey/DOI as found)
 - evidence_spans (list of {claim, exact_quote} dicts, max 3)
@@ -287,10 +294,15 @@ Return JSON.
 
 Then the `manuscript_brief.merge_chunk_briefs` Python helper reduces them.
 
-#### Step B: Retrieve from local corpus (L1)
+#### Step B: Retrieve from local corpus (L1) — only when corpus is configured
+
+L1 retrieval requires `$SCIENCE_MENTOR_CORPUS` to be set **and** `scripts/hybrid_retrieve.py`
+to be present (it ships with the corpus bundle, not the public skill). When either is missing,
+**skip this step silently** and rely on L3 live search (Step C) — same honest-degradation
+pattern as the anchor registry (Step D). Only when both are present:
 
 ```bash
-python -c "import sys; sys.path.insert(0, str(Path.home() / '.claude' / 'skills' / 'thermal-mentor' / 'scripts')); import hybrid_retrieve; import json; r=hybrid_retrieve.query('<user_question + brief>', top_k=8, filters=<optional dict>, method_boost=<bool>); print(json.dumps(r, ensure_ascii=False))"
+python -c "from pathlib import Path; import sys, json; sys.path.insert(0, str(Path.home() / '.claude' / 'skills' / 'science-mentor' / 'scripts')); import hybrid_retrieve; r=hybrid_retrieve.query('<user_question + brief>', top_k=8, filters=<optional dict>, method_boost=<bool>); print(json.dumps(r, ensure_ascii=False))"
 ```
 
 Pass `method_boost=True` if Level-2 indicated method-flavoured query (revision/methodology) or Level-2 `corpus_query` with method keywords.
@@ -298,14 +310,14 @@ Pass `method_boost=True` if Level-2 indicated method-flavoured query (revision/m
 #### Step C: Live external search (L3)
 
 ```bash
-python ~/.claude/skills/thermal-mentor/scripts/live_search.py "<query>" --since 2018-01-01 --top-k 10
+python ~/.claude/skills/science-mentor/scripts/live_search.py "<query>" --since 2018-01-01 --top-k 10
 ```
 
 If user asked about a recent claim and Level-2 hinted at "frontier only", use `--since 2024-01-01`.
 
 #### Step D: Pull anchor registry context
 
-For each anchor citekey appearing in L1 results or L3 author lists, load `$THERMAL_MENTOR_CORPUS/anchor_registry/{anchor_id}.yaml` (only available when the corpus directory is configured; otherwise this step is skipped).
+For each anchor citekey appearing in L1 results or L3 author lists, load `$SCIENCE_MENTOR_CORPUS/anchor_registry/{anchor_id}.yaml` (only available when the corpus directory is configured; otherwise this step is skipped).
 
 #### Step E: Reason and produce JSON
 
@@ -314,17 +326,19 @@ Compose mentor JSON output following the schema in `references/output-schemas.md
 #### Step F: Verify
 
 ```bash
-python ~/.claude/skills/thermal-mentor/scripts/verifier.py <payload_json_path>
+python ~/.claude/skills/science-mentor/scripts/verifier.py <payload_json_path>
 ```
 
 Read the verifier output; the rendered Markdown is what the user sees. If `unrepresented_citations` is non-empty, regenerate the JSON to fold those citations into proper `supporting_refs`.
 
 #### Step G: Persist run (acceptance + audit log)
 
-**For acceptance runs and other persistent invocations**, save both JSON and Markdown atomically and append to audit log via the wrapper:
+**For acceptance runs and other persistent invocations**, save both JSON and Markdown and append to audit log via the wrapper (writes JSON then MD then the audit record — not a single atomic transaction; see `run_acceptance.py` docstring). Pass a payload you have already verified (Step F):
 
 ```python
-import sys; sys.path.insert(0, str(Path.home() / '.claude' / 'skills' / 'thermal-mentor' / 'scripts'))
+from pathlib import Path   # import BEFORE using Path.home() below
+import sys
+sys.path.insert(0, str(Path.home() / '.claude' / 'skills' / 'science-mentor' / 'scripts'))
 from run_acceptance import save_run
 json_path, md_path = save_run(verified_payload, run_name="<unique_run_name>")
 ```
@@ -337,14 +351,29 @@ For ad-hoc/interactive runs where persistence is not needed, call `audit_log.app
 
 Show the verifier-rendered Markdown.
 
+## Domain pack (field-specific vocabulary lives outside the kernel)
+
+The kernel (scan → anomaly → hypothesis → discriminating experiment → citation verification →
+cross-review) has **no domain logic**. All field-specific content — the `direction` menu, the
+target-journal ceiling list, the preserved technical-term whitelist, and the
+`expectation_basis` vocabulary — comes from the **active domain pack** under `domains/`.
+
+- Default pack: `domains/thermal.md` (condensed-matter / materials science).
+- Selection: honor `$MENTOR_DOMAIN_PACK` if set; else if the user says "use the `<field>` domain
+  pack", load `domains/<field>.md`; else default to thermal. If the named pack file is missing,
+  fall back to domain-neutral phrasing (`domains/_template.md` placeholders) and tell the user.
+- When you need a `direction` option set, journal ceiling list, or preserved-term list, read them
+  from the active pack rather than hardcoding. See `domains/README.md`.
+
 ## References
 
 - `references/ask-first-prompts.md` — full question banks for Levels 1–3
 - `references/output-schemas.md` — JSON schemas for each mode
+- `domains/` — swappable domain packs (thermal = default reference pack)
 
 ## Failure modes to watch
 
-- If `recall@8` against an obvious focal paper drops below 0.5 over a 5-query sample, the index needs rebuild (`build_vector_index.py`)
+- (Corpus builds only) If `recall@8` against an obvious focal paper drops below 0.5 over a 5-query sample, the vector index needs a rebuild via the corpus bundle's `build_vector_index.py`. This script is **not** part of the public skill — it ships with the corpus; if you do not have a corpus configured, L1 retrieval is skipped entirely and this failure mode does not apply.
 - If OpenAlex 429s repeatedly, fall back to Semantic Scholar only and tell the user "L3 in degraded mode"
 - If JSON validation fails on output, regenerate; don't fake JSON
 - Retracted citekey/DOI surfaced anywhere = pipeline bug; abort and report

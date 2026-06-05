@@ -1,5 +1,5 @@
 # %% [markdown]
-# # thermal-mentor Mode 0 Walkthrough
+# # science-mentor Mode 0 Walkthrough
 #
 # This script demonstrates the full mode 0 pipeline on the synthetic LLZO dataset.
 # Run with:
@@ -65,6 +65,7 @@ for path, summary in scaffold["csv_summaries"].items():
 payload = {
     "mode": "data_first",
     "scanner_manifest": {
+        "cwd": scaffold["scanner_manifest"]["cwd"],
         "manifest_hash": scaffold["scanner_manifest"]["manifest_hash"],
     },
     "anomalies": [
@@ -74,7 +75,7 @@ payload = {
                 "Lattice contraction yet ionic conductivity rises 4x "
                 "and E_a drops 26%"
             ),
-            "expected_textbook": (
+            "expected_from_prior_knowledge": (
                 "Smaller lattice = tighter channel = higher migration "
                 "barrier (standard hopping model)"
             ),
@@ -251,4 +252,4 @@ print(f"Deleted refs: {len(merged['deleted_refs'])}")
 # ## Try with your own data
 #
 # Replace `examples/demo_dataset/` with a folder of your own manuscripts +
-# CSVs, then invoke `/thermal-mentor` in Claude Code for an interactive run.
+# CSVs, then invoke `/science-mentor` in Claude Code for an interactive run.

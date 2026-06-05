@@ -1,6 +1,6 @@
 """cross_review_merge — Round 3-4 Python: DOI verify + finding classification + Markdown.
 
-Spec ref: 2026-05-25-thermal-mentor-v0.1.3 Section 4.4
+Spec ref: 2026-05-25-science-mentor-v0.1.3 Section 4.4
 
 Round 1-2 (each reviewer critique + roundtable update) is SKILL.md orchestration
 (mentor session uses Agent tool to invoke reviewers). This module handles Round 3
@@ -12,7 +12,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from doi_verify_multisource import DoiCheckResult, verify_doi_multisource
+try:  # package mode: python -m scripts.cross_review_merge
+    from .doi_verify_multisource import verify_doi_multisource
+except ImportError:  # script mode: python scripts/cross_review_merge.py
+    from doi_verify_multisource import verify_doi_multisource
 
 
 def classify_findings(reviews: dict[str, dict]) -> list[dict]:
@@ -96,6 +99,7 @@ def merge_reviews(reviews: dict[str, dict]) -> dict[str, Any]:
 
     surviving_refs = []
     deleted_refs = []
+    unverifiable_refs = []  # verifier_error: network/infra failure, NOT a citation problem
     for ref_value, reviewer in attribution.items():
         result = verify_doi_multisource(ref_value)
         attribution_entry = {
@@ -106,13 +110,20 @@ def merge_reviews(reviews: dict[str, dict]) -> dict[str, Any]:
         }
         if result.status == "verified":
             surviving_refs.append(attribution_entry)
-        else:
+        elif result.status == "verifier_error":
+            # Honor the project's "network failure != not verified" principle
+            # (the same one verifier.py preserves via verifier_error_metadata):
+            # do NOT delete on a transient outage — retain for retry.
+            attribution_entry["error_detail"] = result.error_detail
+            unverifiable_refs.append(attribution_entry)
+        else:  # not_found
             deleted_refs.append(attribution_entry)
 
     return {
         "findings": findings,
         "surviving_refs": surviving_refs,
         "deleted_refs": deleted_refs,
+        "unverifiable_refs": unverifiable_refs,
         "attribution": attribution,
         "reviewers_used": sorted(reviews.keys()),
     }
@@ -153,6 +164,15 @@ def render_merge_markdown(merged: dict[str, Any]) -> str:
             out.append(
                 f"- ~~`{ref['value']}`~~ — {ref['introduced_by']} 引入, "
                 f"{ref['verified_via']} {ref['status']}"
+            )
+        out.append("")
+
+    if merged.get("unverifiable_refs"):
+        out.append("## 暂时无法核验 (网络问题, 非引用错误 — 保留待重试)\n")
+        for ref in merged["unverifiable_refs"]:
+            out.append(
+                f"- ⚠️ `{ref['value']}` — {ref['introduced_by']} 引入, "
+                f"校验器报错 (网络故障), 未剔除"
             )
         out.append("")
 

@@ -1,203 +1,209 @@
-# thermal-mentor
+# science-mentor
 
-[![Tests](https://img.shields.io/github/actions/workflow/status/dalek12310/thermal-mentor/test.yml?label=tests&logo=github)](https://github.com/dalek12310/thermal-mentor/actions/workflows/test.yml)
+[![Tests](https://img.shields.io/github/actions/workflow/status/dalek12310/science-mentor/test.yml?label=tests&logo=github)](https://github.com/dalek12310/science-mentor/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![Claude Code Skill](https://img.shields.io/badge/Claude%20Code-skill-7c3aed.svg)](https://docs.claude.com/en/docs/claude-code/skills)
-[![v0.1.3](https://img.shields.io/badge/version-0.1.3-brightgreen.svg)](CHANGELOG.md)
+[![v0.2.0](https://img.shields.io/badge/version-0.2.0-brightgreen.svg)](CHANGELOG.md)
 
-> A Claude Code skill for **data-first mentor sessions** on scientific manuscripts.
-> Built for researchers doing materials science, physics, chemistry, and engineering.
+> **A Claude Code mentor that reads your experimental data, finds where your measurements
+> contradict the textbook, and turns each surprise into a testable hypothesis + a discriminating
+> experiment — with every citation cross-checked against up to 6 sources (4 always-on, +2 with
+> API keys), never fabricated.**
+
+It runs a disciplined **scientific-method protocol** with teeth where it counts: **every citation
+is code-verified against multiple sources and never fabricated**, while the skill's hard rules
+require a verbatim quote behind every claim and a falsifiable prediction behind every mechanism.
+
+*Scope, honestly:* the discovery + verification engine is domain-general (it operates on generic
+CSV columns, text, and DOIs). The shipped prompt examples and the optional publication corpus are
+**physics / materials-science flavored** — other fields work but benefit from a domain pack.
 
 [简体中文文档 / Chinese version](README_zh-CN.md) · [Full Manual](docs/MANUAL.md) · [完整手册](docs/MANUAL_zh-CN.md)
 
 ---
 
-## What it does
+## The problem it solves
 
-When you invoke `/thermal-mentor` in Claude Code, the skill runs a **three-step reflective routing protocol** on your data:
+You have raw data and a draft. You can't tell whether you're holding a *Nature Materials* story
+or a routine paper — and the people who could tell you are busy.
 
-1. **Step 0** — Scans your current working directory for manuscripts (`.docx/.pdf/.md/.txt`) and structured data (`.csv/.xlsx`), then builds a `data_brief.json` scaffold. The mentor session (you, the LLM) enriches it with anomaly extraction.
+So you ask an LLM, and you get one of two useless answers:
 
-2. **Step 0.5** — Shows a 1-screen reading to the user: detected files, key claims (with source citations), and candidate anomalies (with verbatim quotes). User can interrupt and correct.
+- **Generic encouragement** — *"This looks like a great paper!"*
+- **Generic critique** — *"Cite more references and tighten the discussion."*
 
-3. **Step 1** — Inner monologue infers user intent (case A/B/C/D), then presents 2-4 tailored options via `AskUserQuestion`. Each option includes a verbatim quote + mentor inference pair.
+Neither one actually *looked at your numbers*. `science-mentor` starts from your data: it finds
+the places where your measurements disagree with what theory predicts, and reasons forward from
+those surprises — the same move a good advisor makes when they lean over your plots.
 
-Then it dispatches to one of two pipelines:
+## What makes it different
 
-- **Mode 0 (data-first)** — anomaly enumeration -> hypothesis enumeration -> discriminating experiment proposal -> optional cross-review -> verifier -> audit log
-- **Publication-strategy mode** — original v0.1 workflow for novelty review / highlight / revision / direction / corpus query
+- **It reads your data before it talks.** A deterministic scan of your folder runs first
+  (trend detection on every column, quotes pulled from your notes) — *then* it asks what you want.
+  The most surprising thing in your data drives the conversation, not a template.
+- **Every "mechanism" comes with a way to kill it.** For each candidate explanation it lists the
+  *other things you should see in your data if it's true*, so you can check it yourself instead of
+  trusting the model — then it proposes one experiment that tells competing explanations apart
+  (preferring ones you can answer with data you already have).
+- **It can't fabricate a citation.** Every reference is checked through OpenAlex → Crossref →
+  Semantic Scholar → DOI.org (+ Lens / Web of Science if you have keys). Unverifiable refs are
+  dropped, not bluffed — and a network failure is reported as a network failure, never silently
+  upgraded to "verified."
 
-Or **both** — mode 0 first, then publication strategy as a handover.
+## A worked example
 
-## Key Features
+Suppose your folder has a 4-row CSV from a doping series:
 
-### Multi-source DOI verification
-
-Multi-source DOI verification chain: 4 always-on sources (OpenAlex, Crossref, Semantic Scholar, DOI.org HEAD) + 2 env-gated sources (Lens.org via `LENS_API_TOKEN`, Web of Science via `WOS_API_KEY`). Authoritative `not_found` semantic (Crossref + DOI.org HEAD = ground truth). 24h disk cache. Network failures explicitly returned as `verifier_error` (not silently mapped to `verified`).
-
-### Anomaly-driven mentor reasoning
-
-Mode 0 actively looks for **textbook surprises** in the data — places where the user's measurements contradict standard predictions. Each anomaly gets the 6-field schema (`observation`, `expected_textbook`, `surprise_score`, `data_evidence`, `mentor_inference`, `context_questions_to_user`).
-
-### Round-table cross-review
-
-Independent reviewers (Opus / Codex / DeepSeek) critique the mentor output in parallel (Round 1), see each other's findings (Round 2), then Python merges with non-discriminatory DOI attribution (Round 3-4). No reviewer-discrimination in citation provenance.
-
-> Non-discriminatory means no reviewer is singled out as "high risk" by default; technically the merge uses first-wins ordering when the same DOI is introduced by multiple reviewers.
-
-### paper-pdf-acquisition handoff
-
-When mentor needs paper full-text it can't access, it generates a CSV manifest (`doi, citekey, why_needed, expected_section, resume_token`) for the user to run `/paper-pdf-acquisition` in a separate session.
-
-### Reproducibility lock
-
-`data_brief_hash` is computed over scanner-determined invariants only (file SHA256s, CSV summaries, text content). LLM-enriched fields are excluded so multiple runs against the same cwd produce the same hash. The `run_acceptance.py` script supports `--repeat N` for N-trial stability testing.
-
-### Plain-language hard rule (人话)
-
-User-facing language (Markdown rendering, `AskUserQuestion` options) is plain Chinese/English — no internal codenames (`mode_0`, `L1/L3`, `anomaly_brief`). Technical terms (DFT, XAFS, XPS, phonon) are preserved.
-
-## Installation
-
-### As a Claude Code skill (recommended)
-
-```bash
-git clone https://github.com/dalek12310/thermal-mentor.git ~/.claude/skills/thermal-mentor
-# Restart Claude Code; the skill auto-activates on /thermal-mentor invocations
+```csv
+sample,dopant_pct,lattice_param_A,conductivity_Scm,activation_eV
+S0,0,12.974,1.8e-4,0.42
+S2,2,12.961,2.7e-4,0.38
+S4,4,12.945,3.5e-4,0.34
+S6,6,12.926,4.2e-4,0.31
 ```
 
-### As a standalone Python library
+You run the skill. Instead of "looks promising!", you get:
+
+> **Anomaly (high surprise).** The lattice *contracts* with doping, yet conductivity *rises 4×*
+> and the activation energy *drops* 0.42 → 0.31 eV.
+> *Textbook expectation:* a tighter lattice narrows the ion channel and should **raise** the
+> barrier. Evidence: `data.csv`, `activation_eV` column, monotonic decrease.
+>
+> **Two competing mechanisms** —
+> *H1: local-distortion percolation.* If true, you should also see broader PDF peaks at high
+> doping and new Raman modes.
+> *H2: carrier-concentration jump.* If true, a Hall measurement should show carrier density
+> rising ~4×.
+>
+> **One experiment that separates them:** run Hall on the same 4 samples. Flat carrier density ⇒
+> H1; ~4× rise ⇒ H2. *(Answerable with a standard 4-point setup — no new synthesis.)*
+>
+> **Is this novel?** Two prior reports describe the conductivity rise, but neither pairs it with
+> the E_a drop under lattice contraction — *that* pairing is the unclaimed angle. *(Refs:
+> `10.xxxx/...` verified, `10.yyyy/...` verified.)*
+
+That is the difference between a chatbot and a mentor: a falsifiable next step, grounded in *your*
+rows, with citations you can trust.
+
+## Quick start — as a Claude Code skill (recommended)
 
 ```bash
-git clone https://github.com/dalek12310/thermal-mentor.git
-cd thermal-mentor
-pip install -e .
-
-# Run unit tests (no live network, no corpus needed — should pass)
-pytest tests/ -v
+git clone https://github.com/dalek12310/science-mentor.git ~/.claude/skills/science-mentor
+# Restart Claude Code, then from a folder that has your data + draft:
 ```
 
-Requires Python >= 3.10.
+```
+You: /science-mentor
+Mentor: [silently scans the folder]
+        Based on your data, what do you want me to do?
+          1. Dig into the surprising result in your conductivity vs. lattice data  (recommended)
+          2. Assess where this manuscript could be submitted
+          3. Both — dig first, then strategy
+          4. Something else
+You: 1
+Mentor: [anomaly → hypotheses → discriminating experiment, as above]
+```
 
-## Configuration
+It scans your current working directory, shows you what it found (with quotes you can correct),
+infers your intent, and routes you. You stay in control at every step.
 
-Set these environment variables for full functionality (all optional):
+## What you get: two modes
 
-| Variable | Purpose | Default behavior if unset |
-|---|---|---|
-| `OPENALEX_MAILTO` | Your email for OpenAlex/Crossref polite pool | Anonymous pool (rate-limited, slower) |
-| `THERMAL_MENTOR_CORPUS` | Directory containing `distillation_corpus_v2.csv` + `retraction_blacklist.yaml` | Publication-mode local citekey checks return `not_found`; mode 0 unaffected |
-| `LENS_API_TOKEN` | Lens.org Scholarly API token | Lens source omitted from L3 fan-out |
-| `WOS_API_KEY` | Web of Science Starter API key | WoS source omitted |
-| `CLAUDE_MODEL_ID`, `CLAUDE_MODEL_VERSION` | Recorded in reproducibility block of acceptance runs | `"unknown"` recorded |
+| Mode | What it does for you |
+|---|---|
+| **Discovery** (data-first) | Turns your raw data into: the anomalies that contradict expectation → competing mechanisms, each with a self-check prediction → one discriminating experiment per anomaly. Best when you have data and want to know *what's really going on*. |
+| **Publication strategy** | Honest novelty review, selling-point mining, revision help, and direction suggestions — grounded in your data, not in journal hype. Best when you have a draft and want to know *where it can go*. (Uses an optional local corpus; physics/materials flavored.) |
 
-Set them in your shell profile (`.bashrc`/`.zshrc`) or via a `.env` file at the repo root (`.env` is gitignored).
+Or run **both**: discovery first, then strategy picks up where discovery left off.
 
-## Quick Start
+## How we keep it honest
 
-### 1. As a Claude Code skill
+Some are enforced in Python, some are hard rules the skill must follow at every step — not good intentions:
 
-Just invoke `/thermal-mentor` in any Claude Code session. The skill scans your CWD and routes you.
+- **No fabricated citations.** Multi-source DOI verification; unverifiable refs are dropped and
+  logged, network errors are surfaced (not hidden) as "verifier error."
+- **No flattery.** A hard rule forbids inflating novelty to encourage you; if the literature
+  shows your result is already published, it says so.
+- **Reproducible runs.** A `data_brief_hash` over the deterministic scan lets you re-run the same
+  data and get the same starting point; model/version provenance is recorded separately.
+- **Plain language.** User-facing output never leaks internal codenames; technical terms (DFT,
+  XAFS, phonon, …) are preserved.
 
-### 2. As CLI tools
+## Advanced: use the Python scripts / CLI
+
+The scan → verify → persist pipeline is also usable headless from the checkout:
 
 ```bash
-# Step 1: scan your data dir into a scaffold
-python scripts/anomaly_brief.py path/to/your/data/dir --out tmp/data_brief.json --include-text
+git clone https://github.com/dalek12310/science-mentor.git
+cd science-mentor && pip install -e .
+pytest tests/ -v          # 77 passed — no network, no corpus needed
 
-# Step 2: hand-edit tmp/data_brief.json (or let the skill session enrich it via Claude)
-#   - fill in central_claims, candidate_anomalies, materials_system, manuscript_stage
-
-# Step 3: run the verifier on your mode 0 payload
-python scripts/verifier.py tmp/payload.json
-
-# Step 4: persist the acceptance run with reproducibility manifest
+# Scan a data dir into a scaffold
+python scripts/anomaly_brief.py path/to/data --out tmp/data_brief.json --include-text
+# (a mentor session, or you by hand, fills in claims + anomalies)
+python scripts/verifier.py tmp/payload.json                      # verify + render
 python scripts/run_acceptance.py tmp/payload.json \
-    --run-name "myproject_v1_data_first_run1" \
-    --reproducibility-manifest tmp/data_brief.json \
-    --repeat 3   # N=3 repeats for stability testing
-
-# Cross-review merge (after collecting reviewer JSON files)
-python scripts/cross_review_merge.py \
-    tmp/round1_opus.json tmp/round1_codex.json tmp/round1_ds.json \
-    --out tmp/cross_review_final.json
+    --run-name "myproject_run1" --reproducibility-manifest tmp/data_brief.json --repeat 3
 ```
 
-## Architecture
+See [`docs/DEMO.md`](docs/DEMO.md) for a full end-to-end walkthrough on a sample dataset.
 
-```
-thermal-mentor/
-|-- SKILL.md                 # Claude Code skill entry point
-|-- README.md                # This file
-|-- README_zh-CN.md          # Chinese version
-|-- LICENSE                  # MIT
-|-- pyproject.toml           # Python package config
-|-- scripts/                 # 11 Python modules
-|   |-- anomaly_brief.py     # Step 0 scanner + data_brief scaffold + summarize_csv
-|   |-- audit_log.py         # JSONL append-only audit trail
-|   |-- cross_review_merge.py  # Round 3-4: classify findings + non-discriminatory DOI attribution + Markdown render
-|   |-- doi_verify_multisource.py  # 4 always-on + 2 env-gated verification chain + 24h cache
-|   |-- eval_runner.py       # Mode 0 metrics (anomaly_recall, hypothesis_completeness, ...)
-|   |-- live_search.py       # L3 fan-out: OpenAlex/S2/arXiv + optional Lens/WoS
-|   |-- manuscript_brief.py  # Document text extraction (.docx/.pdf/.md/.txt)
-|   |-- paper_pdf_handoff.py # Manifest CSV + resume instruction
-|   |-- run_acceptance.py    # Persist run JSON+MD + reproducibility block + N-repeat
-|   `-- verifier.py          # Mode dispatch + verify_mode_0 + verify_payload (publication)
-|-- references/              # 7 design docs
-|   |-- ask-first-prompts.md
-|   |-- data-first-prompts.md
-|   |-- output-schemas.md
-|   |-- output-schemas-data-first.md
-|   |-- user-facing-language.md
-|   |-- cross-review-protocol.md
-|   `-- pdf-acquisition-handoff.md
-|-- docs/
-|   |-- MANUAL.md            # Full English user manual
-|   `-- MANUAL_zh-CN.md      # Full Chinese user manual
-`-- tests/                   # 64 unit tests, no external dependencies
-    |-- conftest.py
-    |-- fixtures/sample_dataset/
-    `-- test_*.py
-```
+## Installation & configuration
 
-See [`docs/MANUAL.md`](docs/MANUAL.md) for the full English manual or [`docs/MANUAL_zh-CN.md`](docs/MANUAL_zh-CN.md) for the Chinese manual.
-
-## Testing
+Python ≥ 3.10. All environment variables are **optional** — the tool degrades gracefully without
+them (e.g. unset corpus ⇒ local citekey checks return `not_found`, discovery mode unaffected).
+Full table in [the manual](docs/MANUAL.md#3-configuration-environment-variables); the common one:
 
 ```bash
-pytest tests/ -v
-# Expected: 64 passed
+export OPENALEX_MAILTO="you@example.com"   # faster, friendlier DOI verification
 ```
 
-No live network or corpus needed — all tests use mocked `httpx` clients and the generic `sample_dataset` fixture.
+## Under the hood
 
-## Roadmap (v0.1.4+)
+For readers who want the mechanism (you don't need this to use it):
 
-- Add `pipeline_version` field to `audit_log` records
-- DataCite / mEDRA DOI source extensions
-- Reproducibility block: include Python version + dependency hashes + random seed
-- SKILL.md mirror drift pre-commit hook
-- Defensive invariants for `verifier_error_metadata` propagation
+- **Three-step reflective routing** — *Step 0* deterministic scan → *Step 0.5* shows you the
+  reading (files, claims, candidate anomalies, with quotes) → *Step 1* infers intent (cases
+  A/B/C/D) and offers tailored options, each backed by a verbatim quote + the mentor's inference
+  so you can challenge either independently.
+- **Mode-0 pipeline** — anomaly enumeration → hypothesis enumeration (with `predicts_observable`)
+  → discriminating experiment → optional cross-review → verifier → audit log.
+- **Round-table cross-review** — independent reviewers critique in parallel, then see each other's
+  findings, then a deterministic merge grades confidence by agreement (consensus / majority /
+  singleton) with non-discriminatory citation attribution.
+- **paper-pdf-acquisition handoff** — when full text is needed, it emits a manifest CSV to run the
+  separate `/paper-pdf-acquisition` skill, rather than blocking the session.
+
+Design docs live in [`references/`](references/); the full protocol is in [`docs/MANUAL.md`](docs/MANUAL.md).
+
+## Project info
+
+```
+science-mentor/
+├── SKILL.md            # Claude Code skill entry point
+├── scripts/            # Python backend (scanner, verifier, DOI chain, cross-review, …)
+├── references/         # design docs (routing, schemas, cross-review, plain-language rule)
+├── docs/               # MANUAL (EN/zh), DEMO walkthrough, blog notes
+├── examples/           # sample dataset for the demo
+└── tests/              # 77 unit tests — no network, no corpus needed
+```
+
+- **Testing:** `pytest tests/ -v` → 77 passed (mocked `httpx`, generic sample fixture).
+- **Roadmap (v0.1.4+):** `pipeline_version` in audit records; DataCite/mEDRA DOI sources;
+  cross-machine reproducibility (relativize scan paths); pluggable per-domain packs.
+- **Contributing:** issues and PRs welcome — please read the design docs in `references/` first.
+- **License:** MIT — see [LICENSE](LICENSE).
 
 ## Citation
 
-If this tool helps your research workflow, please cite:
-
 ```bibtex
-@software{thermal_mentor_2026,
-  author = {thermal-mentor contributors},
-  title = {thermal-mentor: Reflective routing + data-first mode for scientific manuscript mentor sessions},
-  year = {2026},
-  version = {0.1.3},
-  url = {https://github.com/dalek12310/thermal-mentor}
+@software{science_mentor_2026,
+  author  = {science-mentor contributors},
+  title   = {science-mentor: a code-enforced scientific-method engine (data-first anomaly →
+             hypothesis → discriminating experiment) for Claude Code},
+  year    = {2026},
+  version = {0.2.0},
+  url     = {https://github.com/dalek12310/science-mentor}
 }
 ```
-
-## Contributing
-
-Issues and PRs welcome. Please read the design docs in `references/` first.
-
-## License
-
-MIT — see [LICENSE](LICENSE).

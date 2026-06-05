@@ -1,6 +1,6 @@
 """JSON-first verifier with OpenAlex abstract sanity check + Chinese regex backstop.
 
-Corpus is optional. When ``THERMAL_MENTOR_CORPUS`` env var is unset or the
+Corpus is optional. When ``SCIENCE_MENTOR_CORPUS`` env var is unset or the
 corresponding files do not exist, ``check_local_citekey`` returns ``not_found``
 for every key (publication mode degrades gracefully — DOI verification still
 works via ``verify_doi_multisource``). Mode 0 (data-first) is unaffected.
@@ -19,10 +19,15 @@ from pathlib import Path
 import httpx
 import yaml
 
-from doi_verify_multisource import DoiCheckResult, verify_doi_multisource
+try:  # package mode: python -m scripts.verifier
+    from .doi_verify_multisource import DoiCheckResult, verify_doi_multisource
+except ImportError:  # script mode: python scripts/verifier.py
+    from doi_verify_multisource import DoiCheckResult, verify_doi_multisource
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]  # scripts/ -> repo root
-_CORPUS_PATH = os.environ.get("THERMAL_MENTOR_CORPUS", "")
+# SCIENCE_MENTOR_CORPUS is canonical; THERMAL_MENTOR_CORPUS kept as a deprecated fallback
+# for one release so existing setups keep working after the rename.
+_CORPUS_PATH = os.environ.get("SCIENCE_MENTOR_CORPUS") or os.environ.get("THERMAL_MENTOR_CORPUS", "")
 CORPUS_CSV = Path(_CORPUS_PATH) / "distillation_corpus_v2.csv" if _CORPUS_PATH else None
 RETRACTION_YAML = Path(_CORPUS_PATH) / "retraction_blacklist.yaml" if _CORPUS_PATH else None
 CACHE_DIR = _REPO_ROOT / "cache" / "openalex_abstracts"
@@ -30,8 +35,8 @@ CACHE_DIR = _REPO_ROOT / "cache" / "openalex_abstracts"
 OPENALEX = "https://api.openalex.org"
 _MAILTO = os.environ.get("OPENALEX_MAILTO", "")
 USER_AGENT = (
-    f"thermal-mentor/0.1.3 (mailto:{_MAILTO})" if _MAILTO
-    else "thermal-mentor/0.1.3"
+    f"science-mentor/0.2.0 (mailto:{_MAILTO})" if _MAILTO
+    else "science-mentor/0.2.0"
 )
 SANITY_CHECK_THRESHOLD = 0.55
 
@@ -158,15 +163,60 @@ def content_sanity_check(claim_text: str, doi: str) -> dict:
     with similarity=0.0 — downstream code treats this as ``warning_flag=True``
     (no similarity check performed) but does not crash.
     """
+    # No real similarity is computed in the public release (the embedding model
+    # is not shipped). "warning_flag" must therefore mean "checked and overlap is
+    # LOW", NOT "we couldn't check" — otherwise every verified claim gets a bogus
+    # "内容与摘要重叠度低" alarm. So when we cannot actually check, warning_flag=False
+    # and the reason records that no check ran (transparent, not alarming).
     abstract = fetch_openalex_abstract(doi)
     if not abstract:
-        return {"abstract": "", "similarity": 0.0, "warning_flag": True, "reason": "no_abstract"}
+        return {"abstract": "", "similarity": None, "warning_flag": False,
+                "checked": False, "reason": "no_abstract"}
     return {
         "abstract": abstract[:600],
-        "similarity": 0.0,
-        "warning_flag": True,
+        "similarity": None,
+        "warning_flag": False,
+        "checked": False,
         "reason": "embed_model_not_available",
     }
+
+
+def _coerce_ref(ref):
+    """Normalize a supporting_ref to dict form.
+
+    The schema specifies refs as dicts, but an LLM session often emits bare
+    strings (e.g. ``"supporting_refs": ["10.1038/nature12373"]``). Coerce those
+    to a dict so verification never crashes on ``ref.get(...)``.
+    """
+    if isinstance(ref, dict):
+        return ref
+    s = str(ref).strip()
+    low = s.lower()
+    if low.startswith("10."):
+        rt = "doi"
+    elif low.startswith("arxiv:"):
+        rt, s = "arxiv", s.split(":", 1)[1].strip()
+    else:
+        rt = "unknown"
+    return {"ref_type": rt, "value": s}
+
+
+def _evidence_source_exists(source: str, manifest_cwd: str = "") -> bool:
+    """Check that a data_evidence source file exists.
+
+    Accepts both a plain path and the documented ``file.ext:7`` / ``file.ext:7-9``
+    (file:line) form by stripping a trailing ``:<linespec>`` before the check.
+    The trailing-digits pattern never matches a Windows drive prefix (``C:/...``).
+    Falls back to resolving relative to the scanner manifest's cwd.
+    """
+    if not source:
+        return False
+    candidate = re.sub(r":\d+(?:-\d+)?$", "", source)
+    if Path(candidate).exists():
+        return True
+    if manifest_cwd and (Path(manifest_cwd) / candidate).exists():
+        return True
+    return False
 
 
 @lru_cache(maxsize=1)
@@ -188,6 +238,7 @@ def _doi_for_citekey(citekey: str) -> str:
 
 def verify_payload(payload: dict, run_sanity: bool = True) -> dict:
     for claim in payload.get("claims", []):
+        claim["supporting_refs"] = [_coerce_ref(r) for r in claim.get("supporting_refs", [])]
         for ref in claim.get("supporting_refs", []):
             rt = ref.get("ref_type", "")
             val = ref.get("value", "")
@@ -206,7 +257,9 @@ def verify_payload(payload: dict, run_sanity: bool = True) -> dict:
                     ref["verified_via"] = result.source
                     if result.status == "verifier_error":
                         ref["verifier_error_metadata"] = result.error_detail
-            elif rt == "openalex":
+            elif rt in ("openalex", "arxiv"):
+                # arXiv IDs are valid refs we can't verify via the DOI chain —
+                # mark external_unverified, NOT not_found (don't imply fabrication).
                 ref["verification_status"] = "external_unverified"
             elif rt == "user_manuscript":
                 ref["verification_status"] = "verified"
@@ -227,28 +280,37 @@ def verify_payload(payload: dict, run_sanity: bool = True) -> dict:
 def verify_mode_0(payload: dict) -> dict:
     """Mode 0 (data-first) verifier branch.
 
-    Spec ref: 2026-05-25-thermal-mentor-v0.1.3 Section 2.7
+    Spec ref: 2026-05-25-science-mentor-v0.1.3 Section 2.7
 
     - anomaly observations 不验 (数据陈述)
     - data_evidence source 文件存在性验证
     - hypothesis supporting_refs 走多源 DOI 验证 (如有)
     - experiments 不验 (forward proposal)
     """
+    manifest_cwd = payload.get("scanner_manifest", {}).get("cwd", "")
     for anomaly in payload.get("anomalies", []):
         for ev in anomaly.get("data_evidence", []):
             source = ev.get("source", "")
             ev["verification_status"] = (
-                "verified" if Path(source).exists() else "not_found"
+                "verified" if _evidence_source_exists(source, manifest_cwd) else "not_found"
             )
     for hyp in payload.get("hypotheses", []):
+        hyp["supporting_refs"] = [_coerce_ref(r) for r in hyp.get("supporting_refs", [])]
         for ref in hyp.get("supporting_refs", []):
             value = ref.get("value", "")
-            if ref.get("ref_type") == "doi" and value:
+            rt = ref.get("ref_type", "")
+            if rt == "doi" and value:
                 result = verify_doi_multisource(value)
                 ref["verification_status"] = doi_result_to_v01_status(result)
                 ref["verified_via"] = result.source
                 if result.status == "verifier_error":
                     ref["verifier_error_metadata"] = result.error_detail
+            elif rt in ("arxiv", "openalex"):
+                ref["verification_status"] = "external_unverified"
+            elif rt == "user_manuscript":
+                ref["verification_status"] = "verified"
+            else:
+                ref["verification_status"] = "not_found"
     return payload
 
 
@@ -269,7 +331,7 @@ def validate_schema_mode_0(payload: dict) -> list[str]:
 def render_markdown(payload: dict) -> str:
     out: list[str] = []
     mode = payload.get("mode", "?")
-    out.append(f"# /thermal-mentor — {mode}\n")
+    out.append(f"# /science-mentor — {mode}\n")
     verdict = payload.get("verdict") or {}
     out.append(f"**Verdict** (confidence: {verdict.get('confidence', '?')}): {verdict.get('one_line', '')}")
     out.append("")
@@ -368,7 +430,7 @@ def _compute_validity_mode_0(payload: dict) -> float:
 def render_markdown_mode_0(payload: dict) -> str:
     """Mode 0 Markdown render, 全人话, 含 always-available 召唤 footer."""
     out: list[str] = []
-    out.append("# /thermal-mentor — 数据分析\n")
+    out.append("# /science-mentor — 数据分析\n")
 
     # 我扫到的数据
     files = payload.get("scanner_manifest", {}).get("files", [])
@@ -385,9 +447,12 @@ def render_markdown_mode_0(payload: dict) -> str:
         out.append(f"## 异常现象 ({len(anomalies)} 条)\n")
         for a in anomalies:
             out.append(f"### {a.get('anomaly_id', '?')}: {a.get('observation', '')}")
-            out.append(f"- 教科书预期: {a.get('expected_textbook', '')}")
+            out.append(f"- 理论预期: {a.get('expected_from_prior_knowledge') or a.get('expected_textbook', '')}")
             for ev in a.get("data_evidence", []):
-                out.append(f"- 数据证据 [{ev.get('source', '?')}]: \"{ev.get('quote_text', '')}\"")
+                # Surface evidence whose source file could not be located, so a
+                # fabricated/missing source does not look identical to a real one.
+                flag = " ⚠️(来源文件未找到)" if ev.get("verification_status") == "not_found" else ""
+                out.append(f"- 数据证据 [{ev.get('source', '?')}]: \"{ev.get('quote_text', '')}\"{flag}")
             out.append(f"- 我的解读: {a.get('mentor_inference', '')}")
             for q in a.get("context_questions_to_user", []):
                 out.append(f"- 我想反过来问你: {q}")
@@ -412,6 +477,23 @@ def render_markdown_mode_0(payload: dict) -> str:
                     out.append("  - 如果这个机制真成立, 还应该看到:")
                     for p in h["predicts_observable"]:
                         out.append(f"    • {p}")
+                refs = h.get("supporting_refs", [])
+                if refs:
+                    rendered = []
+                    for ref in refs:
+                        val = ref.get("value", "?") if isinstance(ref, dict) else str(ref)
+                        st = ref.get("verification_status", "") if isinstance(ref, dict) else ""
+                        if st == "verified":
+                            rendered.append(f"{val} (已核验)")
+                        elif st == "not_found":
+                            rendered.append(f"⚠️{val} (没查到)")
+                        elif isinstance(ref, dict) and ref.get("verifier_error_metadata"):
+                            rendered.append(f"⚠️{val} (校验器报错, 网络问题)")
+                        elif st == "external_unverified":
+                            rendered.append(f"{val} (未核验)")
+                        else:
+                            rendered.append(val)
+                    out.append(f"  - 参考文献: {', '.join(rendered)}")
             out.append("")
 
     # 区分实验
@@ -431,8 +513,10 @@ def render_markdown_mode_0(payload: dict) -> str:
                 ans = e.get("answerable_by", "?")
                 ans_human = {
                     "existing_data": "用现有数据能答",
-                    "new_experiment": "要做新实验",
-                    "dft": "要 DFT 计算",
+                    "new_experiment": "要做新实验/新观测",
+                    "new_observation": "要做新实验/新观测",
+                    "computation": "要做计算/模拟",
+                    "dft": "要做计算/模拟",  # legacy alias
                 }.get(ans, ans)
                 out.append(f"  - {ans_human}")
                 if e.get("expected_outcome"):
@@ -511,8 +595,16 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("payload_file")
     p.add_argument("--no-sanity", action="store_true")
+    p.add_argument("--json", action="store_true",
+                   help="print the VERIFIED payload JSON instead of the rendered Markdown")
     args = p.parse_args()
     payload_text = Path(args.payload_file).read_text(encoding="utf-8-sig")
     result = run_pipeline(payload_text, run_sanity=not args.no_sanity)
     _configure_stdout_utf8()
+    if result.get("error"):
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+        sys.exit(1)
+    if args.json:
+        print(json.dumps(result.get("payload", {}), indent=2, ensure_ascii=False))
+        sys.exit(0)
     print(result.get("markdown") or json.dumps(result, indent=2, ensure_ascii=False))
