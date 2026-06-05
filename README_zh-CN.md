@@ -1,201 +1,193 @@
-# thermal-mentor
+# science-mentor
 
-[![Tests](https://img.shields.io/github/actions/workflow/status/dalek12310/thermal-mentor/test.yml?label=tests&logo=github)](https://github.com/dalek12310/thermal-mentor/actions/workflows/test.yml)
+[![Tests](https://img.shields.io/github/actions/workflow/status/dalek12310/science-mentor/test.yml?label=tests&logo=github)](https://github.com/dalek12310/science-mentor/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![Claude Code Skill](https://img.shields.io/badge/Claude%20Code-skill-7c3aed.svg)](https://docs.claude.com/en/docs/claude-code/skills)
-[![v0.1.3](https://img.shields.io/badge/version-0.1.3-brightgreen.svg)](CHANGELOG.md)
+[![v0.2.0](https://img.shields.io/badge/version-0.2.0-brightgreen.svg)](CHANGELOG.md)
 
-> Claude Code skill — 给科研稿件做**数据优先**的导师会话工具。
-> 面向材料、物理、化学、工程等方向的研究者。
+> **一个会读你实验数据的 Claude Code 导师：它找出你的测量与教科书预测矛盾的地方，把每个意外
+> 变成一个可证伪的假设 + 一个能区分机制的实验——而且每条引用都经最多 6 个来源交叉核验
+> （4 个常驻 + 2 个需 API key），绝不编造。**
+
+它跑的是一套有牙齿的**科学方法流程**：**每条引用都由代码多源核验、绝不编造**；同时 skill 的
+硬规则要求每个结论都要有逐字引用、每个机制都要有可证伪的预测。
+
+*关于适用范围，说实话：* 发现 + 核验这套引擎是领域通用的（后端处理的是通用 CSV 列、通用文本、
+通用 DOI）。但随包附带的 prompt 示例和可选的 publication 语料是**物理 / 材料学口味**的——
+其他领域能用，但配一个领域包会更好。
 
 [English version](README.md) · [完整中文手册](docs/MANUAL_zh-CN.md) · [Full English Manual](docs/MANUAL.md)
 
 ---
 
-## 这玩意儿干啥用
+## 它解决什么问题
 
-在 Claude Code 里调 `/thermal-mentor`,skill 会跑一套**三步反思式路由**:
+你手里有原始数据和一份草稿，却分不清这是一篇 *Nature Materials* 级的故事，还是一篇普通论文——
+而真正能给你判断的人都很忙。
 
-1. **Step 0** — 扫你当前目录的稿件 (`.docx/.pdf/.md/.txt`) 和实验数据 (`.csv/.xlsx`),建一个 `data_brief.json` 骨架。Mentor session (LLM, 也就是你) 来填异常提取的部分。
+于是你去问 LLM，得到的往往是两种没用的回答：
 
-2. **Step 0.5** — 给用户一屏阅读:扫到的文件 + 关键 claim (含来源引用) + 候选 anomaly (含原文 verbatim)。用户可以打断纠正。
+- **空洞的鼓励**——"这看起来是篇很棒的论文！"
+- **套路的批评**——"多引点文献、把讨论收紧一点。"
 
-3. **Step 1** — 内心独白推断用户意图 (case A/B/C/D), 然后用 `AskUserQuestion` 给 2-4 个量身定制的选项。每个选项含 verbatim 原文 + mentor 解读两栏。
+这两种都**没真的看你的数字**。`science-mentor` 从你的数据出发：它找出你的测量与理论预测不符的
+地方，从这些"意外"往前推理——就像一个好导师俯身看你的图时会做的事。
 
-然后路由到两条 pipeline 之一:
+## 它跟别的不一样在哪
 
-- **Mode 0 (data-first)** — anomaly 枚举 -> hypothesis 枚举 -> 区分实验 -> 可选 cross-review -> verifier -> 审计日志
-- **Publication-strategy mode** — v0.1 原有 workflow, 做 novelty review / highlight / revision / direction / corpus query
+- **它先读数据，再开口。** 先跑一遍对你目录的确定性扫描（每一列做趋势检测、从你的笔记里摘出
+  原文），**然后**才问你想干什么。带动对话的是你数据里最反常的那个点，而不是一个模板。
+- **每个"机制"都自带一把能弄死它的刀。** 对每个候选解释，它会列出"如果这个机制成立，你还应该
+  在数据里看到什么"，让你能自己去核对、而不是只能信模型——然后给出一个能把竞争机制分开的实验
+  （优先选你用已有数据就能回答的）。
+- **它编造不了引用。** 每条文献都经 OpenAlex → Crossref → Semantic Scholar → DOI.org
+  （有 key 还会加 Lens / Web of Science）核验。核验不了的直接剔除、绝不蒙；网络故障就如实
+  报成网络故障，绝不偷偷升级成"已核验"。
 
-或者 **both** — 先 mode 0, 再 publication strategy 接力。
+## 一个实战示例
 
-## 核心特性
+假设你目录里有一份 4 行的掺杂序列 CSV：
 
-### 多源 DOI 核验
-
-DOI 多源验证链: 4 个常驻源 (OpenAlex / Crossref / Semantic Scholar / DOI.org HEAD) + 2 个 env-gated 源 (Lens.org 需 `LENS_API_TOKEN`, Web of Science 需 `WOS_API_KEY`)。权威 `not_found` 语义 (Crossref + DOI.org HEAD = 真值)。本地缓存 24 小时。网络异常时显式返回 `verifier_error` (不会偷偷映射成 `verified`)。
-
-### 数据驱动的导师推理
-
-Mode 0 主动在数据里找**反课本的惊喜** —— 用户测出来的现象和教科书预测冲突的位置。每个 anomaly 都按 6 字段 schema 填: `observation` / `expected_textbook` / `surprise_score` / `data_evidence` / `mentor_inference` / `context_questions_to_user`。
-
-### 圆桌审稿 (cross-review)
-
-独立审稿人 (Opus / Codex / DeepSeek) 并行 critique mentor 输出 (Round 1), 看完彼此的 finding 再表态 (Round 2), 然后 Python merge + 对称 DOI 归属 (Round 3-4)。引用归属上无审稿人歧视。
-
-### paper-pdf-acquisition 联动
-
-Mentor 需要某篇 paper 全文但拿不到时, 生成 CSV manifest (`doi, citekey, why_needed, expected_section, resume_token`), 用户开新 session 跑 `/paper-pdf-acquisition` 拿全文, 完成后回本 session 接续。
-
-### Reproducibility lock (复现锁)
-
-`data_brief_hash` 只对**扫描器决定的不变量**做哈希 (文件 SHA256, CSV summary, 文本内容)。LLM 写入的字段不算入哈希, 因此同一目录跑多次 mode 0 的 brief hash 总相等。`run_acceptance.py` 支持 `--repeat N` 做稳定性测试。
-
-### 人话硬规则
-
-面向用户的文案 (Markdown 渲染, `AskUserQuestion` 选项) 必须是中文/英文人话 —— 不出现内部 codename (`mode_0`, `L1/L3`, `anomaly_brief`)。专业术语 (DFT, XAFS, XPS, phonon) 保留。
-
-## 安装
-
-### 装成 Claude Code skill (推荐)
-
-```bash
-git clone https://github.com/dalek12310/thermal-mentor.git ~/.claude/skills/thermal-mentor
-# 重启 Claude Code; skill 在 /thermal-mentor 调用时自动激活
+```csv
+sample,dopant_pct,lattice_param_A,conductivity_Scm,activation_eV
+S0,0,12.974,1.8e-4,0.42
+S2,2,12.961,2.7e-4,0.38
+S4,4,12.945,3.5e-4,0.34
+S6,6,12.926,4.2e-4,0.31
 ```
 
-### 当独立 Python 库用
+你调用 skill。它给你的不是"很有前景！"，而是：
+
+> **反常（高 surprise）。** 晶格随掺杂*收缩*，电导率却*涨了 4 倍*，活化能*降*了 0.42 → 0.31 eV。
+> *教科书预期：* 晶格更紧 → 离子通道更窄 → 迁移势垒应当**升高**。证据：`data.csv`，
+> `activation_eV` 列单调下降。
+>
+> **两个竞争机制——**
+> *H1：局域畸变形成新渗流路径。* 若成立，你还应看到高掺杂下 PDF 峰展宽、出现新的 Raman 模。
+> *H2：载流子浓度跃升。* 若成立，Hall 测量应显示载流子密度涨约 4 倍。
+>
+> **一个能区分它俩的实验：** 对同样这 4 个样品做 Hall。载流子密度持平 ⇒ H1；涨约 4 倍 ⇒ H2。
+> *（标准四点装置就能答，不用重新合成。）*
+>
+> **这新颖吗？** 已有两篇报道过电导率上升，但都没有把它和"晶格收缩下 E_a 反降"配在一起——
+> *这个配对*才是没人占的角度。*（引用：`10.xxxx/...` 已核验，`10.yyyy/...` 已核验。）*
+
+这就是"聊天机器人"和"导师"的差别：一个扎根于*你自己的数据行*、引用可信、可证伪的下一步。
+
+## 快速上手——当 Claude Code skill 用（推荐）
 
 ```bash
-git clone https://github.com/dalek12310/thermal-mentor.git
-cd thermal-mentor
-pip install -e .
-
-# 跑单测 (不需要联网, 不需要 corpus, 应当 pass)
-pytest tests/ -v
+git clone https://github.com/dalek12310/science-mentor.git ~/.claude/skills/science-mentor
+# 重启 Claude Code，然后在一个有你数据 + 草稿的目录里：
 ```
 
-要求 Python >= 3.10。
+```
+你: /science-mentor
+导师: [静默扫描目录]
+      基于你的数据，你想让我做什么？
+        1. 深挖你电导率 vs 晶格数据里那个反常结果  (推荐)
+        2. 评估这篇稿子能投哪
+        3. 两个都要——先深挖，再聊策略
+        4. 别的
+你: 1
+导师: [反常 → 候选机制 → 区分实验，如上]
+```
 
-## 配置 (环境变量)
+它会扫你当前目录，把扫到的东西摊给你看（带原文，你可以纠正），推断你的意图，然后路由你。
+每一步你都说了算。
 
-下面所有变量都是可选的, 不设置也能跑, 但功能会降级:
+## 你能得到什么：两种模式
 
-| 变量名 | 用途 | 不设置时的行为 |
-|---|---|---|
-| `OPENALEX_MAILTO` | OpenAlex / Crossref polite pool 用的邮箱 | 匿名池 (限流, 慢) |
-| `THERMAL_MENTOR_CORPUS` | 本地 corpus 目录 (含 `distillation_corpus_v2.csv` + `retraction_blacklist.yaml`) | publication 模式的本地 citekey 检查返回 `not_found`; mode 0 不受影响 |
-| `LENS_API_TOKEN` | Lens.org Scholarly API token | L3 fan-out 跳过 Lens 源 |
-| `WOS_API_KEY` | Web of Science Starter API key | 跳过 WoS 源 |
-| `CLAUDE_MODEL_ID`, `CLAUDE_MODEL_VERSION` | acceptance 跑的 reproducibility 块记录 | 记成 `"unknown"` |
+| 模式 | 它替你做什么 |
+|---|---|
+| **发现模式**（数据优先） | 把你的原始数据变成：与预期矛盾的反常 → 各带一条自检预测的竞争机制 → 每个反常一个区分实验。适合"有数据、想搞清到底发生了什么"。 |
+| **出版策略模式** | 诚实的新颖性评估、卖点挖掘、改稿、方向建议——扎根你的数据、不跟期刊吹捧走。适合"有草稿、想知道能投哪"。（用一个可选的本地语料，物理/材料口味。） |
 
-可以写进 shell profile (`.bashrc` / `.zshrc`), 也可以在仓库根目录建个 `.env` 文件 (`.env` 已在 `.gitignore` 里)。
+也可以**两个都跑**：先发现、再让策略接着发现的结论往下走。
 
-## 快速上手
+## 我们怎么保证它诚实
 
-### 1. 装成 Claude Code skill 用
+下面这些有的是代码强制、有的是 skill 每步必须遵守的硬规则，不靠自觉：
 
-在任何 Claude Code session 里调 `/thermal-mentor`。Skill 会自动扫 CWD 给你路由。
+- **不编造引用。** 多源 DOI 核验；核验不了的剔除并记录，网络错误如实报成"校验器报错"、不隐藏。
+- **不拍马屁。** 一条硬规则禁止为了鼓励你而夸大新颖性；如果文献显示你的结果已经发表了，它直说。
+- **可复现。** 对确定性扫描算 `data_brief_hash`，让你重跑同一批数据能得到同一个起点；模型/版本
+  溯源单独记录。
+- **说人话。** 面向用户的输出绝不漏内部 codename；专业术语（DFT、XAFS、phonon……）保留。
 
-### 2. 当 CLI 工具用
+## 进阶：当 Python 脚本 / CLI 用
+
+扫描 → 核验 → 落盘这条管线也能在 checkout 里脱离会话直接跑：
 
 ```bash
-# 第一步: 扫数据目录, 输出 scaffold
-python scripts/anomaly_brief.py path/to/your/data/dir --out tmp/data_brief.json --include-text
+git clone https://github.com/dalek12310/science-mentor.git
+cd science-mentor && pip install -e .
+pytest tests/ -v          # 77 passed——不需联网、不需 corpus
 
-# 第二步: 手改 tmp/data_brief.json (或者让 skill session 通过 Claude 加工)
-#   - 填 central_claims, candidate_anomalies, materials_system, manuscript_stage
-
-# 第三步: 跑 mode 0 verifier
-python scripts/verifier.py tmp/payload.json
-
-# 第四步: 落盘 acceptance run, 带 reproducibility manifest
+# 扫数据目录成 scaffold
+python scripts/anomaly_brief.py path/to/data --out tmp/data_brief.json --include-text
+# （由 mentor session、或你手工，填入 claims + anomalies）
+python scripts/verifier.py tmp/payload.json                      # 核验 + 渲染
 python scripts/run_acceptance.py tmp/payload.json \
-    --run-name "myproject_v1_data_first_run1" \
-    --reproducibility-manifest tmp/data_brief.json \
-    --repeat 3   # N=3 重复跑做稳定性测试
-
-# Cross-review 合并 (收集到审稿人 JSON 之后)
-python scripts/cross_review_merge.py \
-    tmp/round1_opus.json tmp/round1_codex.json tmp/round1_ds.json \
-    --out tmp/cross_review_final.json
+    --run-name "myproject_run1" --reproducibility-manifest tmp/data_brief.json --repeat 3
 ```
 
-## 目录结构
+完整的端到端走查见 [`docs/DEMO.md`](docs/DEMO.md)。
 
-```
-thermal-mentor/
-|-- SKILL.md                 # Claude Code skill 入口
-|-- README.md                # 英文版 README
-|-- README_zh-CN.md          # 本文件
-|-- LICENSE                  # MIT
-|-- pyproject.toml           # Python 包配置
-|-- scripts/                 # 11 个 Python 模块
-|   |-- anomaly_brief.py     # Step 0 扫描器 + data_brief scaffold + summarize_csv
-|   |-- audit_log.py         # JSONL append-only 审计日志
-|   |-- cross_review_merge.py  # Round 3-4: finding 分类 + 对称 DOI 归属 + Markdown 渲染
-|   |-- doi_verify_multisource.py  # 6 源 DOI 核验链 + 24h 缓存
-|   |-- eval_runner.py       # Mode 0 指标 (anomaly_recall, hypothesis_completeness, ...)
-|   |-- live_search.py       # L3 fan-out: OpenAlex/S2/arXiv + 可选 Lens/WoS
-|   |-- manuscript_brief.py  # 文档文本提取 (.docx/.pdf/.md/.txt)
-|   |-- paper_pdf_handoff.py # Manifest CSV + resume instruction
-|   |-- run_acceptance.py    # 落盘 JSON+MD + reproducibility 块 + N-repeat
-|   `-- verifier.py          # Mode 分发 + verify_mode_0 + verify_payload (publication)
-|-- references/              # 7 篇设计文档
-|   |-- ask-first-prompts.md
-|   |-- data-first-prompts.md
-|   |-- output-schemas.md
-|   |-- output-schemas-data-first.md
-|   |-- user-facing-language.md
-|   |-- cross-review-protocol.md
-|   `-- pdf-acquisition-handoff.md
-|-- docs/
-|   |-- MANUAL.md            # 完整英文使用手册
-|   `-- MANUAL_zh-CN.md      # 完整中文使用手册
-`-- tests/                   # 64 个单测, 无外部依赖
-    |-- conftest.py
-    |-- fixtures/sample_dataset/
-    `-- test_*.py
-```
+## 安装与配置
 
-完整英文手册见 [`docs/MANUAL.md`](docs/MANUAL.md), 完整中文手册见 [`docs/MANUAL_zh-CN.md`](docs/MANUAL_zh-CN.md)。
-
-## 跑测试
+要求 Python ≥ 3.10。所有环境变量都是**可选**的——不设也能跑、只是功能降级（例如不设 corpus ⇒
+本地 citekey 检查返回 `not_found`，发现模式不受影响）。完整表见
+[手册](docs/MANUAL_zh-CN.md)；最常用的一个：
 
 ```bash
-pytest tests/ -v
-# 期望: 64 passed
+export OPENALEX_MAILTO="you@example.com"   # DOI 核验更快、更友好
 ```
 
-测试都用 mock 过的 `httpx` 客户端 + 通用 `sample_dataset` fixture, 不需要联网, 不需要 corpus。
+## 底层原理
 
-## 路线图 (v0.1.4+)
+给想看机制的读者（用它并不需要懂这些）：
 
-- `audit_log` 记录里加 `pipeline_version` 字段
-- DataCite / mEDRA DOI 源扩展
-- Reproducibility 块再加 Python 版本 + 依赖哈希 + 随机种子
-- SKILL.md 镜像漂移的 pre-commit hook
-- `verifier_error_metadata` 传播的防御不变式
+- **三步反思式路由**——*Step 0* 确定性扫描 → *Step 0.5* 把"读到的东西"摊给你（文件、claim、
+  候选反常，都带原文）→ *Step 1* 推断意图（case A/B/C/D），给出量身定制的选项，每个都锚定
+  一条逐字引用 + mentor 解读，让你能分别质疑"证据"和"解读"。
+- **Mode-0 管线**——反常枚举 → 假设枚举（带 `predicts_observable`）→ 区分实验 → 可选交叉评审
+  → verifier → 审计日志。
+- **圆桌交叉评审**——独立 reviewer 并行 critique，再互看彼此的 finding，最后由确定性 merge 按
+  一致度分级置信（全同 / 多数 / 孤证），引用归属不歧视任何 reviewer。
+- **paper-pdf-acquisition 联动**——需要全文时，生成 manifest CSV 让你去单独跑
+  `/paper-pdf-acquisition`，而不是卡住当前会话。
+
+设计文档见 [`references/`](references/)；完整协议见 [`docs/MANUAL_zh-CN.md`](docs/MANUAL_zh-CN.md)。
+
+## 项目信息
+
+```
+science-mentor/
+├── SKILL.md            # Claude Code skill 入口
+├── scripts/            # Python 后端（扫描器、verifier、DOI 链、交叉评审……）
+├── references/         # 设计文档（路由、schema、交叉评审、人话规则）
+├── docs/               # 手册（中/英）、DEMO 走查、blog 笔记
+├── examples/           # demo 用的样例数据集
+└── tests/              # 77 个单测——不需联网、不需 corpus
+```
+
+- **跑测试：** `pytest tests/ -v` → 77 passed（mock 过的 `httpx` + 通用样例 fixture）。
+- **路线图（v0.1.4+）：** audit 记录加 `pipeline_version`；DataCite/mEDRA DOI 源；跨机复现
+  （相对化扫描路径）；可插拔的每领域包。
+- **贡献：** 欢迎 issue / PR——提之前请先读 `references/` 下的设计文档。
+- **License：** MIT——见 [LICENSE](LICENSE)。
 
 ## 引用
 
-如果本工具帮到你的科研流程, 请引用:
-
 ```bibtex
-@software{thermal_mentor_2026,
-  author = {thermal-mentor contributors},
-  title = {thermal-mentor: Reflective routing + data-first mode for scientific manuscript mentor sessions},
-  year = {2026},
-  version = {0.1.3},
-  url = {https://github.com/dalek12310/thermal-mentor}
+@software{science_mentor_2026,
+  author  = {science-mentor contributors},
+  title   = {science-mentor: a code-enforced scientific-method engine (data-first anomaly →
+             hypothesis → discriminating experiment) for Claude Code},
+  year    = {2026},
+  version = {0.2.0},
+  url     = {https://github.com/dalek12310/science-mentor}
 }
 ```
-
-## 贡献
-
-欢迎 issue / PR。提之前请先读 `references/` 下的设计文档。
-
-## License
-
-MIT — 见 [LICENSE](LICENSE)。

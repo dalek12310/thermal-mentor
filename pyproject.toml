@@ -3,8 +3,8 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "thermal-mentor"
-version = "0.1.3"
+name = "science-mentor"
+version = "0.2.0"
 description = "Reflective routing + data-first mode for scientific manuscript mentor sessions"
 authors = [{name = "dalek12310", email = "chunyuchun@qq.com"}]
 readme = "README.md"
@@ -22,9 +22,9 @@ dependencies = [
 test = ["pytest>=7"]
 
 [project.urls]
-Homepage = "https://github.com/dalek12310/thermal-mentor"
-Repository = "https://github.com/dalek12310/thermal-mentor"
-Issues = "https://github.com/dalek12310/thermal-mentor/issues"
+Homepage = "https://github.com/dalek12310/science-mentor"
+Repository = "https://github.com/dalek12310/science-mentor"
+Issues = "https://github.com/dalek12310/science-mentor/issues"
 
 [tool.setuptools]
 packages = ["scripts"]

@@ -6,7 +6,7 @@ You did not get the help you wanted.
 
 The assistant didn't open your CSV. It didn't read your notes. It didn't notice that the activation energy column is doing something interesting. It just routed your text-string to a textbook response. You close the tab.
 
-This essay is about a small architectural change that fixes the most common form of this failure. It's the pattern I built into `thermal-mentor`, a Claude Code skill for data-first mentor sessions on scientific manuscripts. I think it generalizes well beyond science, so it's worth describing on its own.
+This essay is about a small architectural change that fixes the most common form of this failure. It's the pattern I built into `science-mentor`, a Claude Code skill for data-first mentor sessions on scientific manuscripts. I think it generalizes well beyond science, so it's worth describing on its own.
 
 ## The default failure mode: ask-then-act
 
@@ -24,7 +24,7 @@ This is why so many "AI research assistant" demos work great on toy examples and
 
 ## The pattern: scan-then-ask
 
-The fix is structurally trivial and is what `thermal-mentor` calls **reflective routing**. The loop becomes:
+The fix is structurally trivial and is what `science-mentor` calls **reflective routing**. The loop becomes:
 
 1. Assistant scans the data first (without asking permission, because permission to read the visible CWD was already implied by invocation).
 2. Assistant presents a one-screen reading: "Here's what I see. These columns are doing X. This paragraph says Y. Did I get it right?"
@@ -38,7 +38,7 @@ In practice, the user's response shifts from a 200-word summary of their own wor
 
 ## Implementation sketch
 
-In `thermal-mentor`, this is three discrete steps in `SKILL.md`:
+In `science-mentor`, this is three discrete steps in `SKILL.md`:
 
 **Step 0** — scan the current working directory into a JSON scaffold:
 
@@ -71,14 +71,14 @@ The options are not generic. They're seeded by what was actually found in the da
 
 ## The verifier_error semantic — sub-pattern
 
-While we're talking about reflective routing, one related decision in `thermal-mentor` deserves a callout because most tools get it wrong: **the distinction between "the DOI doesn't exist" and "I couldn't reach the verification service."**
+While we're talking about reflective routing, one related decision in `science-mentor` deserves a callout because most tools get it wrong: **the distinction between "the DOI doesn't exist" and "I couldn't reach the verification service."**
 
 These are completely different facts. The first means the citation is wrong. The second means the network is down. If you map them to the same status code (which most DOI checkers do), you get a silent false positive: citations that *look* verified actually slipped through because OpenAlex returned a 503.
 
-`thermal-mentor` returns three states from `verify_doi_multisource`:
+`science-mentor` returns three states from `verify_doi_multisource`:
 
 - `verified` — found in at least one authoritative source
-- `not_found` — checked authoritative sources, doesn't exist anywhere (Crossref or DOI.org HEAD says so)
+- `not_found` — the doi.org resolver (which covers every registration agency) could not resolve it
 - `verifier_error` — couldn't reach the sources due to network/HTTP/timeout errors
 
 The `verifier_error` state is *not* counted in the `citation_validity_rate` denominator. The metric tells you only what fraction of actually-checkable references were valid. Network problems don't lie about your work.
@@ -100,23 +100,23 @@ The common thread: any interaction where the user *expects* the assistant to hav
 >
 > The **pattern** (scan-then-ask reflective routing + `verifier_error` distinct status) is general — it applies to any workflow where the user has a corpus of artifacts and uncertain intent.
 >
-> The **shipped implementation** is specialized for research manuscripts: `SUPPORTED_EXTENSIONS` hardcodes `.docx/.pdf/.md/.txt/.csv/.xlsx`; the `data_brief` schema embeds `materials_system` and `manuscript_stage`; the verifier has Chinese citation regex + materials-science retraction blacklist. Porting to code review or customer support would require schema extensions and scanner adjustments — possible in a v0.2 fork, but not v0.1.3 functionality.
+> The **shipped implementation** is specialized for research manuscripts: `SUPPORTED_EXTENSIONS` hardcodes `.docx/.pdf/.md/.txt/.csv/.xlsx`; the `data_brief` schema embeds `study_system` and `manuscript_stage`; the verifier has Chinese citation regex + materials-science retraction blacklist. Porting to code review or customer support would require schema extensions and scanner adjustments — possible in a v0.2 fork, but not v0.1.3 functionality.
 
 ## A short defense against the obvious objection
 
 "But this is just chain-of-thought prompting!" Yes and no. CoT is about getting better answers by writing intermediate reasoning. Reflective routing is about the *ordering of the user-facing protocol* — scan before ask. A model can have brilliant CoT and still ruin the conversation by asking "what would you like help with?" before reading the data. Reflective routing is the part of the protocol the user sees.
 
-The other obvious objection: "what if scanning the data is expensive?" In `thermal-mentor`'s case, Step 0 is pure Python and finishes in under a second on typical research dirs. There's no token cost. The mentor LLM only sees the *scaffold* — file hashes + CSV trends + text content — not the raw bytes of every PDF. The expensive part (LLM reasoning) happens once, on the compressed scaffold, before the first user prompt.
+The other obvious objection: "what if scanning the data is expensive?" In `science-mentor`'s case, Step 0 is pure Python and finishes in under a second on typical research dirs. There's no token cost. The mentor LLM only sees the *scaffold* — file hashes + CSV trends + text content — not the raw bytes of every PDF. The expensive part (LLM reasoning) happens once, on the compressed scaffold, before the first user prompt.
 
 ## Try it
 
-`thermal-mentor` v0.1.3 is MIT-licensed and ships with:
+`science-mentor` v0.1.3 is MIT-licensed and ships with:
 
-- 64 unit tests passing on Python 3.10-3.13 across Ubuntu + Windows
+- 77 unit tests passing on Python 3.10-3.13 across Ubuntu + Windows
 - Bilingual English + 简体中文 docs (1000+ line manual each)
 - A synthetic LLZO demo dataset and a 5-step walkthrough
 - The reflective routing pattern wired in as Steps 0 / 0.5 / 1 of `SKILL.md`
 
-[github.com/dalek12310/thermal-mentor](https://github.com/dalek12310/thermal-mentor)
+[github.com/dalek12310/science-mentor](https://github.com/dalek12310/science-mentor)
 
 If you build an AI research assistant — or really any tool where the user expects you to have read their files before asking what they want — try the scan-then-ask order. It's not a deep idea, but it's the difference between "useful collaborator" and "another tab to close."

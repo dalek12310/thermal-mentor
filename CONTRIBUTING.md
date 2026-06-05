@@ -1,4 +1,4 @@
-# Contributing to thermal-mentor
+# Contributing to science-mentor
 
 First — thanks for considering a contribution. Below are the conventions this project follows.
 
@@ -13,7 +13,7 @@ First — thanks for considering a contribution. Below are the conventions this 
 
 ## Design philosophy
 
-thermal-mentor is opinionated:
+science-mentor is opinionated:
 
 1. **Anti-empiricism in citations** — every reference must be verifiable via DOI or local citekey. The `verifier_error` vs `not_found` distinction is deliberate; don't merge them.
 2. **人话 hard rule** — user-facing strings (AskUserQuestion, Markdown) are plain language. Internal codenames (`mode_0`, `anomaly_brief`, `L1/L3`) belong in code/comments only.

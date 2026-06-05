@@ -9,8 +9,6 @@ _SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-import pytest
-
 
 def test_legacy_doi_status_verified():
     from doi_verify_multisource import DoiCheckResult
@@ -251,3 +249,69 @@ def test_render_markdown_flags_verifier_error_refs():
     assert "10.1/err" in md
     # genuine external_unverified ref stays normal
     assert "10.1/ok" in md
+
+
+def test_verify_mode_0_accepts_string_supporting_refs(monkeypatch):
+    """Regression (blind audit): LLMs emit bare-string refs; must not crash."""
+    import json
+    from doi_verify_multisource import DoiCheckResult
+    import verifier
+    monkeypatch.setattr(
+        "verifier.verify_doi_multisource",
+        lambda doi: DoiCheckResult("verified", "openalex", {"id": "W1"}, None),
+    )
+    payload = {
+        "mode": "data_first",
+        "anomalies": [{"anomaly_id": "A1", "observation": "o", "data_evidence": []}],
+        "hypotheses": [{
+            "hypothesis_id": "H1", "anomaly_id": "A1", "mechanism_text": "m",
+            "supporting_refs": ["10.1038/nature12373"],  # bare string, not dict
+        }],
+        "experiments": [], "audit_log_id": "t",
+    }
+    result = verifier.run_pipeline(json.dumps(payload))
+    assert "error" not in result
+    ref = result["payload"]["hypotheses"][0]["supporting_refs"][0]
+    assert ref["ref_type"] == "doi"
+    assert ref["verification_status"] == "verified"
+
+
+def test_verify_mode_0_source_with_line_suffix(tmp_path):
+    """Regression (blind audit #1): data_evidence source 'file.ext:7' must resolve
+    by stripping the trailing :line, not be marked not_found."""
+    import json
+    import verifier
+    f = tmp_path / "notes.txt"
+    f.write_text("data", encoding="utf-8")
+    payload = {
+        "mode": "data_first",
+        "anomalies": [{"anomaly_id": "A1", "observation": "o", "data_evidence": [
+            {"source": f"{f}:7", "quote_text": "q", "line_or_para": "7"}]}],
+        "hypotheses": [], "experiments": [], "audit_log_id": "t",
+    }
+    result = verifier.run_pipeline(json.dumps(payload))
+    ev = result["payload"]["anomalies"][0]["data_evidence"][0]
+    assert ev["verification_status"] == "verified"
+
+
+def test_no_false_content_warning_when_similarity_not_checked(monkeypatch):
+    """Regression (blind audit #4): the stub sanity-check (no embedding model) must
+    NOT raise the '内容与摘要重叠度低' alarm — that means 'checked & low', not 'not checked'."""
+    from doi_verify_multisource import DoiCheckResult
+    import verifier
+    monkeypatch.setattr(
+        "verifier.verify_doi_multisource",
+        lambda doi: DoiCheckResult("verified", "openalex", {"id": "W1"}, None),
+    )
+    monkeypatch.setattr("verifier.fetch_openalex_abstract", lambda doi: "some abstract text")
+    payload = {
+        "mode": "novelty_review",
+        "verdict": {"one_line": "x", "confidence": "low"},
+        "claims": [{"claim_id": "C1", "claim_text": "t",
+                    "supporting_refs": [{"ref_type": "doi", "value": "10.1/a"}]}],
+        "prior_art_coverage": {}, "audit_log_id": "t",
+    }
+    result = verifier.verify_payload(payload, run_sanity=True)
+    claim = result["claims"][0]
+    assert not claim.get("claim_content_warning"), "must not warn when similarity not computed"
+    assert claim["supporting_refs"][0]["content_sanity"]["checked"] is False

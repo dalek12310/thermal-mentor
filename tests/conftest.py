@@ -1,4 +1,4 @@
-"""Shared pytest fixtures for thermal-mentor tests."""
+"""Shared pytest fixtures for science-mentor tests."""
 from __future__ import annotations
 
 import json

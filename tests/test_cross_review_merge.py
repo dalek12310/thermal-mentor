@@ -4,8 +4,6 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import pytest
-
 # Make scripts/ importable (flattened release layout)
 _SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 if str(_SCRIPTS) not in sys.path:
@@ -45,7 +43,6 @@ def test_classify_findings_consensus_majority_singleton():
     from cross_review_merge import classify_findings
     cls = classify_findings(SAMPLE_REVIEWS)
 
-    high_count = sum(1 for f in cls if f["confidence"] == "high")
     medium_count = sum(1 for f in cls if f["confidence"] == "medium")
     low_count = sum(1 for f in cls if f["confidence"] == "low")
 
@@ -143,3 +140,26 @@ def test_cli_writes_merged_json_and_md(tmp_path, monkeypatch):
     assert "findings" in merged
     assert len(merged["findings"]) == 2  # one from each reviewer (both singleton low)
     assert set(merged["reviewers_used"]) == {"opus", "ds"}
+
+
+def test_verifier_error_ref_retained_not_deleted(monkeypatch):
+    """Regression (blind audit #3): a transient network failure (verifier_error) must
+    NOT delete a reviewer-introduced ref — it goes to a retained 'unverifiable' bucket,
+    honoring the project's 'network failure != not verified' principle."""
+    from doi_verify_multisource import DoiCheckResult
+    reviews = {
+        "opus": {
+            "findings": [{"id": "F1", "text": "x", "severity": "high"}],
+            "introduced_refs": [{"value": "10.1/neterr", "ref_type": "doi"}],
+        }
+    }
+    monkeypatch.setattr(
+        "cross_review_merge.verify_doi_multisource",
+        lambda doi: DoiCheckResult("verifier_error", "all_sources_failed", None, {"errors": []}),
+    )
+    from cross_review_merge import merge_reviews
+    merged = merge_reviews(reviews)
+    deleted = [r["value"] for r in merged["deleted_refs"]]
+    unverifiable = [r["value"] for r in merged["unverifiable_refs"]]
+    assert "10.1/neterr" not in deleted, "network error must not delete the ref"
+    assert "10.1/neterr" in unverifiable

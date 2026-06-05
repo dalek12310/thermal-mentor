@@ -78,18 +78,34 @@ def save_run(
         "sampler_temperature": os.environ.get("CLAUDE_TEMPERATURE", "default"),
         "data_brief_hash": data_brief_hash or "",
         "system_prompt_hash": system_prompt_hash or "",
-        "pipeline_version": "0.1.3",
+        "pipeline_version": "0.2.0",
         "run_name": run_name,
     }
+
+    # Lineage fix (Codex audit #5): ensure the persisted JSON carries the SAME
+    # audit_log_id that the audit-log record will use. audit_log.append() only
+    # stamps its own record dict, not the payload, so generate/seed the id here
+    # BEFORE writing the JSON.
+    if not payload.get("audit_log_id"):
+        payload["audit_log_id"] = audit_log.new_id()
 
     stamp = date.today().isoformat().replace("-", "")
     base = f"{run_name}_{stamp}" if stamp not in run_name else run_name
     json_path = out_dir / f"{base}.json"
     md_path = out_dir / f"{base}.md"
 
+    # Verify BEFORE persisting so the saved JSON + Markdown reflect verification
+    # (Codex audit #2: save_run previously rendered the RAW, unverified payload —
+    # the Step-G verification was discarded). If verification crashes, abort
+    # without writing raw payloads.
+    mode = payload.get("mode", "")
+    if mode == "data_first":
+        payload = verifier.verify_mode_0(payload)
+    else:
+        payload = verifier.verify_payload(payload, run_sanity=False)
+
     json_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
-    mode = payload.get("mode", "")
     if mode == "data_first":
         md = verifier.render_markdown_mode_0(payload)
     else:
@@ -101,7 +117,13 @@ def save_run(
         "run_name": run_name,
         "audit_log_id": payload.get("audit_log_id"),
         "mode": payload.get("mode"),
-        "claims_count": len(payload.get("claims", [])),
+        # data_first payloads carry anomalies, not claims — count the right section
+        # per mode so the audit record isn't always 0 for mode 0.
+        "claims_count": (
+            len(payload.get("anomalies", []))
+            if payload.get("mode") == "data_first"
+            else len(payload.get("claims", []))
+        ),
         "json_path": str(json_path),
         "md_path": str(md_path),
     })
@@ -114,7 +136,7 @@ def _compute_prompt_hash() -> str:
 
     Checks two locations in order:
       1. <repo_root>/SKILL.md (when running from a checkout)
-      2. ~/.claude/skills/thermal-mentor/SKILL.md (when installed as a skill)
+      2. ~/.claude/skills/science-mentor/SKILL.md (when installed as a skill)
 
     Returns 'skill_md_not_found' sentinel if neither exists, so the
     reproducibility block always has a defined value.
@@ -122,7 +144,7 @@ def _compute_prompt_hash() -> str:
     import hashlib
     candidates = [
         _REPO_ROOT / "SKILL.md",
-        Path.home() / ".claude" / "skills" / "thermal-mentor" / "SKILL.md",
+        Path.home() / ".claude" / "skills" / "science-mentor" / "SKILL.md",
     ]
     for skill_md in candidates:
         if skill_md.exists():

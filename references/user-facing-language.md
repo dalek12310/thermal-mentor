@@ -47,14 +47,14 @@ Examples of leaks to avoid:
 
 ## Preserved technical terms
 
-Standard physics / characterization terms stay verbatim — translating them would harm clarity:
+The list of domain terms kept verbatim comes from the **active domain pack**'s `preserved_terms`
+slot (default `domains/thermal.md`) — translating them would harm clarity. The thermal pack, for
+example, preserves DFT/DFPT/AIMD/MLIP, XAFS/EXAFS/XPS/Raman/TEM, phonon/e-ph, κ/ZT/TBC,
+Kröger-Vink/Shannon radii/Boltzmann. Swap the pack for another field's term set (see
+[`domains/`](../domains/)).
 
-- DFT / DFPT / AIMD / MLIP / TDEP / SCPH
-- XAFS / EXAFS / XANES / XPS / EPR / Raman / TEM / STEM / TDTR
-- phonon / Phonon Hall / electron-phonon / e-ph
-- κ (thermal conductivity) / κ_lat / κ_e / ε (permittivity / Seebeck) / ZT / TBC
-- Kröger-Vink / Shannon radii / Wigner / Boltzmann
-- DOI / arXiv / OpenAlex / Crossref / Semantic Scholar / WoS
+Infrastructure terms — `DOI / arXiv / OpenAlex / Crossref / Semantic Scholar / WoS` — are
+preserved in **every** pack regardless of field.
 
 These terms appear in the user's own writing and in standard textbooks; mentor uses them with a Chinese connector when needed (e.g. "EXAFS 看配位数").
 

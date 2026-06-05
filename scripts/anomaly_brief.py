@@ -1,6 +1,6 @@
 """anomaly_brief — cwd scanner + CSV structured preprocessing + LLM anomaly extract.
 
-Spec ref: 2026-05-25-thermal-mentor-v0.1.3 Section 2.2
+Spec ref: 2026-05-25-science-mentor-v0.1.3 Section 2.2
 
 Extends manuscript_brief.py read path with CSV/table structured detection +
 anomaly enumeration prompt. Outputs data_brief.json for mode 0 pipeline.
@@ -9,19 +9,22 @@ Reproducibility note (Section 3.3.1):
   data_brief_hash is computed via _compute_data_brief_hash, which hashes ONLY
   the scanner-determined invariant subset (HASH_PAYLOAD_KEYS): files_found,
   scanner_manifest, csv_summaries, text_files_content. LLM-enriched fields
-  (central_claims / performance_numbers / candidate_anomalies / materials_system
+  (central_claims / performance_numbers / candidate_anomalies / study_system
   / manuscript_stage) are non-deterministic given the same input and are NOT
   hashed here -- model-side reproducibility is captured separately via
   reproducibility.model_id and system_prompt_hash. This ensures that
   build_data_brief (full pipeline) and build_data_brief_scaffold (scanner-only)
   produce the SAME data_brief_hash for the same cwd snapshot, satisfying the
-  v0.1.3 spec lock that "same scanner inputs -> same hash".
+  v0.1.3 spec lock that "same scanner inputs -> same hash". NOTE: the manifest
+  embeds absolute paths, so this is per-machine reproducibility (same data, same
+  machine/paths, multiple LLM runs) — NOT cross-machine. See MANUAL §11.1.
 """
 from __future__ import annotations
 
 import csv as csv_module
 import hashlib
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -35,7 +38,7 @@ HASH_PAYLOAD_KEYS = ("files_found", "scanner_manifest", "csv_summaries", "text_f
 def _canonical_hash_payload(brief: dict) -> dict:
     """Extract scanner-determined invariant subset for data_brief_hash computation.
 
-    LLM-enriched fields (central_claims, candidate_anomalies, materials_system,
+    LLM-enriched fields (central_claims, candidate_anomalies, study_system,
     manuscript_stage) are excluded -- they're non-deterministic given the same
     input and are tracked via reproducibility.model_id / system_prompt_hash
     separately.
@@ -155,17 +158,18 @@ def summarize_csv(csv_path: Path, max_rows: int = 20) -> dict:
                 rows = []
                 for row in reader:
                     rows.append(row)
-                    if len(rows) >= max_rows + 1:
-                        break
             break  # successfully read
         except UnicodeDecodeError:
             continue
     if not rows:
         return {"columns": {}, "row_count": 0, "first_rows": []}
 
+    # Statistics (trend / min / max / row_count) are computed over ALL rows, so a
+    # trend reversal past row `max_rows` is not missed and row_count is accurate.
+    # Only the previews (raw_sample / first_rows) are capped for LLM input size.
     columns_info: dict[str, dict[str, Any]] = {}
     for col in rows[0].keys():
-        raw_vals = [r.get(col, "") for r in rows[:max_rows]]
+        raw_vals = [r.get(col, "") for r in rows]
         numeric_vals: list[float] = []
         for v in raw_vals:
             try:
@@ -192,14 +196,14 @@ def summarize_csv(csv_path: Path, max_rows: int = 20) -> dict:
         "first_rows": rows[:max_rows],
     }
 
-
-import sys
-
 _SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
-from manuscript_brief import read_text  # noqa: E402
+try:  # package mode: python -m scripts.anomaly_brief
+    from .manuscript_brief import read_text  # noqa: E402
+except ImportError:  # script mode: python scripts/anomaly_brief.py
+    from manuscript_brief import read_text  # noqa: E402
 
 
 def dedupe_candidates(
@@ -245,7 +249,7 @@ def _llm_extract_anomalies(
     In tests: monkeypatched.
 
     Returns dict with: central_claims, performance_numbers, candidate_anomalies,
-                       materials_system, manuscript_stage.
+                       study_system, manuscript_stage.
     """
     raise NotImplementedError(
         "_llm_extract_anomalies is called by SKILL.md mentor session, "
@@ -303,7 +307,7 @@ def build_data_brief(cwd: Path) -> dict:
         "central_claims": central_out,
         "performance_numbers": llm_out.get("performance_numbers", []),
         "candidate_anomalies": anomalies_out,
-        "materials_system": llm_out.get("materials_system", ""),
+        "study_system": llm_out.get("study_system", ""),
         "manuscript_stage": llm_out.get("manuscript_stage", ""),
         "scanner_manifest": scanner_manifest,
     }
@@ -362,7 +366,7 @@ def build_data_brief_scaffold(cwd: Path, include_text: bool = False) -> dict:
         "_note": (
             "scanner-only scaffold; LLM-extracted fields "
             "(central_claims/performance_numbers/candidate_anomalies/"
-            "materials_system/manuscript_stage) must be filled by mentor "
+            "study_system/manuscript_stage) must be filled by mentor "
             "session reasoning before treating as complete data_brief."
         ),
         "files_found": scanner_manifest["files"],
@@ -371,7 +375,7 @@ def build_data_brief_scaffold(cwd: Path, include_text: bool = False) -> dict:
         "central_claims": [],
         "performance_numbers": [],
         "candidate_anomalies": [],
-        "materials_system": "",
+        "study_system": "",
         "manuscript_stage": "",
         "scanner_manifest": scanner_manifest,
         "data_brief_hash": data_brief_hash,

@@ -2,14 +2,22 @@
 
 These schemas extend `output-schemas.md` (which covers the publication modes). Mode 0 produces JSON first; `verifier.py` dispatches to `verify_mode_0`, then Step H renders Markdown per `SKILL.md`.
 
+> **Field names are domain-neutral; example *values* are not.** The illustrative values below
+> (defect-chemistry textbook, Shannon radii, aliovalent substitution, `computation`/DFT, etc.)
+> are drawn from the **thermal reference domain pack** (`domains/thermal.md`) purely to make the
+> examples concrete. The schema itself — `expectation_basis`, `expected_from_prior_knowledge`,
+> `study_system`, `answerable_by ∈ {existing_data, new_experiment, computation}` — assumes no
+> field. For another discipline, swap the domain pack (`domains/_template.md`); the structure is
+> unchanged.
+
 ## `data_brief.json` — Step A output
 
-Produced by `anomaly_brief.py` scanner half + mentor LLM half (see SKILL.md Step 0a/0b). The mentor's structured detection fills `observed_trend` and `expected_source_type` so anomaly classification is not entirely subjective.
+Produced by `anomaly_brief.py` scanner half + mentor LLM half (see SKILL.md Step 0a/0b). The mentor's structured detection fills `observed_trend` and `expectation_basis` so anomaly classification is not entirely subjective.
 
 ```json
 {
   "files_found": [
-    {"path": "notes.txt", "type": "txt", "tokens": 1240}
+    {"path": "/abs/path/notes.txt", "type": "txt", "sha256": "<hex>", "size_bytes": 1240}
   ],
   "central_claims": [
     {
@@ -33,24 +41,25 @@ Produced by `anomaly_brief.py` scanner half + mentor LLM half (see SKILL.md Step
       "anomaly_id": "A1",
       "observation_short": "defect signal monotonically decreases with dopant content",
       "observed_trend": "monotonic_decrease",
-      "expected_source_type": "defect-chemistry textbook",
+      "expectation_basis": "defect-chemistry textbook",
       "quote_verbatim": "XPS+EPR 0/2/4/6% signal decreases monotonically",
       "quote_source": "notes.txt:7",
       "quote_hash": "sha256:...",
-      "expected_textbook_short": "aliovalent substitution should net-increase defects",
+      "expected_from_prior_knowledge_short": "aliovalent substitution should net-increase defects",
       "mentor_inference": "self-compensation only explains 'no increase', not 'baseline decrease'",
       "surprise_score": "high"
     }
   ],
-  "materials_system": "doped oxide series",
+  "study_system": "doped oxide series",
   "manuscript_stage": "draft|plan|data-only|mixed",
   "data_brief_hash": "sha256:...",
   "scanner_manifest": {
-    "cwd": "/path/to/manuscript/dir",
-    "files_glob_pattern": "**/*.{txt,md,docx,pdf,csv,xlsx}",
-    "file_hashes": {"notes.txt": "sha256:..."},
-    "scanner_version": "0.1.3",
-    "timestamp": "2026-05-25T10:32:00Z"
+    "cwd": "/abs/path/to/manuscript/dir",
+    "files": [
+      {"path": "/abs/path/.../notes.txt", "type": "txt", "sha256": "<hex>", "size_bytes": 1240}
+    ],
+    "manifest_hash": "<sha256 hex of sorted (path, sha256) pairs>",
+    "scanner_version": "0.1.3"
   },
   "audit_log_id": "20260525-103200-xyz789"
 }
@@ -59,12 +68,12 @@ Produced by `anomaly_brief.py` scanner half + mentor LLM half (see SKILL.md Step
 Field notes:
 
 - `observed_trend` ∈ {`monotonic_increase`, `monotonic_decrease`, `non_monotonic`, `unknown`} — filled by `summarize_csv` deterministic detection where possible (CSV numeric column), not by LLM. Controls `false_anomaly_rate`.
-- `expected_source_type` — explicit label for what textbook / consensus the observation appears to contradict (e.g. `defect-chemistry textbook`, `Shannon radii`, `phonon-defect scaling`, `user-provided`).
+- `expectation_basis` — explicit label for what textbook / consensus the observation appears to contradict (e.g. `defect-chemistry textbook`, `Shannon radii`, `phonon-defect scaling`, `user-provided`).
 - `quote_hash` — `sha256` of `quote_verbatim` byte sequence. Lets downstream stages detect LLM rewrites of the original quote (anti-drift).
 - `data_brief_hash` — sha256 of canonical-serialized brief (sans the hash field itself). Used by acceptance runs to lock reproducibility across N repeats.
-- `scanner_manifest.file_hashes` — per-file sha256 to freeze the exact inputs the brief was generated from.
+- `scanner_manifest.files[*].sha256` — per-file sha256 to freeze the exact inputs the brief was generated from; `scanner_manifest.manifest_hash` is the sha256 over the sorted `(path, sha256)` pairs. Note `cwd` and `files[*].path` are **absolute**, so the hash is reproducible per-machine (see MANUAL §11.1 caveat), not across machines.
 
-Design rationale: `observed_trend` / `expected_source_type` / `quote_hash` / `data_brief_hash` / `scanner_manifest` are all designed for false-anomaly control + acceptance reproducibility.
+Design rationale: `observed_trend` / `expectation_basis` / `quote_hash` / `data_brief_hash` / `scanner_manifest` are all designed for false-anomaly control + acceptance reproducibility.
 
 Anti-drift rule: `candidate_anomalies` items take precedence over `central_claims` in dedupe (same source_file + line/para). Avoids a single sentence appearing in two lists.
 
@@ -76,7 +85,7 @@ Promoted from `candidate_anomalies` by mentor reasoning at the start of mode 0 S
 {
   "anomaly_id": "A1",
   "observation": "Across 0/2/4/6 mol% dopant series, the defect signal (XPS O1s + EPR) decreases monotonically",
-  "expected_textbook": "Aliovalent substitution textbook: trivalent dopant on tetravalent site should net-increase defects to maintain charge balance",
+  "expected_from_prior_knowledge": "Aliovalent substitution textbook: trivalent dopant on tetravalent site should net-increase defects to maintain charge balance",
   "surprise_score": "high",
   "data_evidence": [
     {
@@ -96,7 +105,7 @@ Promoted from `candidate_anomalies` by mentor reasoning at the start of mode 0 S
 Field notes:
 
 - `observation` — 1-2 line plain text; verbatim quote lives in `data_evidence`.
-- `expected_textbook` — explicit prediction the anomaly violates. The mentor must name a textbook / defect chemistry / scaling law — not "literature says".
+- `expected_from_prior_knowledge` — explicit prediction the anomaly violates. The mentor must name a textbook / defect chemistry / scaling law — not "literature says".
 - `surprise_score` ∈ {`high`, `medium`, `low`} — mentor subjective; high means reverses textbook prediction.
 - `data_evidence` — at least 1 verbatim quote with file+line/para pointer.
 - `context_questions_to_user` — mentor's reflexive questions ("things the user knows but didn't write in the manuscript"). User can answer inline; mentor merges before Step C.
@@ -159,7 +168,7 @@ Field notes:
 Field notes:
 
 - `discriminates_between` — list of hypothesis_ids the experiment can distinguish.
-- `answerable_by` ∈ {`existing_data`, `new_experiment`, `dft`}. Prefer `existing_data` — actively look for user's existing assets that haven't been mined.
+- `answerable_by` ∈ {`existing_data`, `new_experiment`, `computation`} (`computation` covers DFT/MD/any simulation). Prefer `existing_data` — actively look for user's existing assets that haven't been mined.
 - `if_new_experiment` — only filled when `answerable_by="new_experiment"`. Mentor estimates rough effort / cost; not authoritative, user should sanity-check.
 - `expected_outcome` — predicted readout under each hypothesis. Lets the user pre-judge whether the experiment is worth doing before running it.
 
@@ -173,7 +182,7 @@ When Step 1 user picks `both`, mode 0 final payload carries a top-level `mode_0_
 | `hypotheses[*].mechanism_text` | Step E | novelty `mechanism claim` candidate |
 | `experiments[*].discriminates_between` | Step F | highlight `selling point` candidate (mechanism / performance / methodology) |
 | `experiments[*].answerable_by == "existing_data"` | Step F | highlight "user's unique asset" candidate |
-| `materials_system` | Step A | `corpus_query` system filter |
+| `study_system` | Step A | `corpus_query` system filter |
 | `data_brief_hash` | Step A | publication `audit_log.linked_data_brief_hash` (lineage) |
 
 Concrete JSON shape:
@@ -197,7 +206,7 @@ Concrete JSON shape:
     "existing_data_assets": [
       "3+ vs 4+ speciation via XPS at 4 mol% dopant"
     ],
-    "materials_system": "doped oxide series",
+    "study_system": "doped oxide series",
     "data_brief_hash": "sha256:..."
   },
   "audit_log_id": "20260525-103200-xyz789"

@@ -4,12 +4,12 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 # Make scripts/ importable (flattened release layout)
 _SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
-
-import pytest
 
 
 def test_normalize_doi_strips_url_prefix():
@@ -61,7 +61,7 @@ def test_openalex_lookup_not_found(mock_openalex_client):
 
 def test_crossref_lookup_signature_compatible():
     """Crossref lookup must return same SourceLookupResult shape as OpenAlex."""
-    from doi_verify_multisource import SourceLookupResult, crossref_lookup
+    from doi_verify_multisource import crossref_lookup
     # Just signature check: callable with (doi: str) -> SourceLookupResult
     import inspect
     sig = inspect.signature(crossref_lookup)
@@ -70,7 +70,7 @@ def test_crossref_lookup_signature_compatible():
 
 def test_doi_org_head_for_existence_only():
     """DOI.org HEAD returns found=True with empty metadata (existence only)."""
-    from doi_verify_multisource import doi_org_head, SourceLookupResult
+    from doi_verify_multisource import doi_org_head
     # HEAD 返回 200/302 → found=True; 404 → found=False
     # 不 mock, 测试 callable shape
     import inspect
@@ -113,30 +113,47 @@ def test_verify_chain_non_authoritative_not_found_continues_to_authoritative(mon
     assert r.source == "crossref"
 
 
-def test_verify_chain_authoritative_not_found_stops(monkeypatch, tmp_path):
-    """Crossref (authoritative) returns not_found — should stop, no fallback to S2."""
-    from doi_verify_multisource import (
-        verify_doi_multisource, SourceLookupResult,
-    )
+def test_verify_chain_doi_head_is_the_absence_authority(monkeypatch, tmp_path):
+    """Only doi.org HEAD (resolves every registration agency) terminates on a
+    negative. A Crossref miss must NOT stop the chain, because Crossref does not
+    index DataCite/Zenodo/mEDRA DOIs — its miss says nothing about existence."""
+    from doi_verify_multisource import verify_doi_multisource, SourceLookupResult
     import doi_verify_multisource as mod
     monkeypatch.setattr(mod, "_CACHE_DIR", tmp_path)
-    s2_called = []
-    monkeypatch.setattr(
-        "doi_verify_multisource.openalex_lookup",
-        lambda doi, **kw: SourceLookupResult(False, None)
-    )
-    monkeypatch.setattr(
-        "doi_verify_multisource.crossref_lookup",
-        lambda doi, **kw: SourceLookupResult(False, None)
-    )
-    def s2_spy(doi, **kw):
-        s2_called.append(doi)
+    head_called = []
+    for name in ("openalex_lookup", "crossref_lookup", "s2_lookup", "lens_lookup"):
+        monkeypatch.setattr(
+            f"doi_verify_multisource.{name}",
+            lambda doi, **kw: SourceLookupResult(False, None),
+        )
+    def head_spy(doi, **kw):
+        head_called.append(doi)
         return SourceLookupResult(False, None)
-    monkeypatch.setattr("doi_verify_multisource.s2_lookup", s2_spy)
+    monkeypatch.setattr("doi_verify_multisource.doi_org_head", head_spy)
     r = verify_doi_multisource("10.1038/example")
     assert r.status == "not_found"
-    assert r.source == "crossref"
-    assert s2_called == [], "Crossref authoritative not_found should stop chain"
+    assert r.source == "doi_head"
+    assert head_called, "Crossref miss must fall through to doi.org HEAD before declaring not_found"
+
+
+def test_verify_chain_crossref_miss_falls_through_to_doi_head(monkeypatch, tmp_path):
+    """Regression (DeepSeek audit #2): a DataCite/Zenodo DOI absent from Crossref
+    but resolvable by doi.org HEAD must verify, not be falsely reported not_found."""
+    from doi_verify_multisource import verify_doi_multisource, SourceLookupResult
+    import doi_verify_multisource as mod
+    monkeypatch.setattr(mod, "_CACHE_DIR", tmp_path)
+    for name in ("openalex_lookup", "crossref_lookup", "s2_lookup", "lens_lookup"):
+        monkeypatch.setattr(
+            f"doi_verify_multisource.{name}",
+            lambda doi, **kw: SourceLookupResult(False, None),
+        )
+    monkeypatch.setattr(
+        "doi_verify_multisource.doi_org_head",
+        lambda doi, **kw: SourceLookupResult(True, {}),
+    )
+    r = verify_doi_multisource("10.5281/zenodo.123456")
+    assert r.status == "verified"
+    assert r.source == "doi_head"
 
 
 def test_verify_chain_all_sources_http_error(monkeypatch, tmp_path):
@@ -202,6 +219,68 @@ def test_cache_does_not_store_verifier_error(monkeypatch, tmp_path):
     r1 = verify_doi_multisource("10.1038/flaky")
     assert r1.status == "verifier_error"
     # Cache should NOT store verifier_error → retry should hit again
-    r2 = verify_doi_multisource("10.1038/flaky")
+    verify_doi_multisource("10.1038/flaky")
     # call_count > 5 means subsequent retry happened
     assert call_count[0] > 5, "verifier_error should not be cached, retry expected"
+
+
+def _fake_head_client(status_code):
+    """Build a fake httpx.Client whose .head() returns the given status."""
+    import httpx
+
+    class _FakeResp:
+        def __init__(self, code, url):
+            self.status_code = code
+            self.request = httpx.Request("HEAD", url)
+
+    class _FakeClient:
+        def __init__(self, *a, **k):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def head(self, url):
+            return _FakeResp(status_code, url)
+
+    return _FakeClient
+
+
+def test_doi_org_head_404_is_absence(monkeypatch):
+    """404 from doi.org → genuine absence (found=False)."""
+    from doi_verify_multisource import doi_org_head
+    monkeypatch.setattr("doi_verify_multisource.httpx.Client", _fake_head_client(404))
+    assert doi_org_head("10.1/gone").found is False
+
+
+def test_doi_org_head_transient_status_raises(monkeypatch):
+    """Regression (Codex audit #4): 503/429 must RAISE (→ verifier_error), not be
+    silently treated as absence and cached for 24h."""
+    import httpx
+    import pytest
+    from doi_verify_multisource import doi_org_head
+    monkeypatch.setattr("doi_verify_multisource.httpx.Client", _fake_head_client(503))
+    with pytest.raises(httpx.HTTPError):
+        doi_org_head("10.1/transient")
+
+
+def test_transient_doi_head_yields_verifier_error_not_not_found(monkeypatch, tmp_path):
+    """End-to-end: a transient doi.org failure must surface as verifier_error,
+    never a (cached) false not_found — doi_head is now the sole absence authority."""
+    import httpx
+    from doi_verify_multisource import verify_doi_multisource, SourceLookupResult
+    import doi_verify_multisource as mod
+    monkeypatch.setattr(mod, "_CACHE_DIR", tmp_path)
+    for name in ("openalex_lookup", "crossref_lookup", "s2_lookup", "lens_lookup"):
+        monkeypatch.setattr(
+            f"doi_verify_multisource.{name}",
+            lambda doi, **kw: SourceLookupResult(False, None),
+        )
+    def head_down(doi, **kw):
+        raise httpx.ConnectError("doi.org unreachable")
+    monkeypatch.setattr("doi_verify_multisource.doi_org_head", head_down)
+    r = verify_doi_multisource("10.1/transient")
+    assert r.status == "verifier_error"

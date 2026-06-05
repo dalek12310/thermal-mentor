@@ -58,11 +58,11 @@ Round 2 can run parallel or serial — parallel preferred for speed, serial usef
 All DOIs / citekeys introduced by any reviewer go through `cross_review_merge.merge_reviews`, which calls `doi_verify_multisource.verify_doi_multisource` (spec Section 4.4.2). The chain:
 
 ```
-OpenAlex (qps=10) → Crossref (qps=50, authoritative) → S2 (qps=1)
-                  → Lens (qps=0.1) → [WoS if WOS_API_KEY] → DOI.org HEAD (authoritative)
+OpenAlex (qps=10) → Crossref (qps=50; positive hits only) → S2 (qps=1)
+                  → Lens (qps=0.1) → [WoS if WOS_API_KEY] → DOI.org HEAD (absence authority)
 ```
 
-Non-authoritative source `not_found` continues fallback; authoritative source `not_found` returns immediately. All-source HTTP failure → `verifier_error`.
+Non-authoritative source `not_found` continues fallback; this includes Crossref misses, because Crossref does not index every DOI registration agency. DOI.org HEAD is the only source allowed to terminate the chain on absence. All-source HTTP failure → `verifier_error`.
 
 Verified refs: keep, label with source attribution.
 Not-found refs: **delete the ref but keep the finding text** (论点跟引用解耦). Mentioned in `cross_review.deleted_refs` for audit transparency.
@@ -85,7 +85,7 @@ The final payload appends:
   "cross_review": {
     "reviewers_used": ["opus", "codex", "ds"],
     "round_table_summary": [{...classified findings...}],
-    "deleted_refs": [{"value": "10.xxxx/...", "reason": "Crossref not_found", "introduced_by": "ds"}],
+    "deleted_refs": [{"value": "10.xxxx/...", "reason": "doi_head not_found", "introduced_by": "ds"}],
     "attribution_per_ref": {"10.1038/...": "opus", "10.1016/...": "codex", ...}
   }
 }
@@ -100,10 +100,10 @@ For each reviewer in Round 1 / Round 2, the mentor session calls the `Agent` too
 ```
 subagent_type: <see table>
 prompt: """
-You are an independent reviewer for thermal-mentor v0.1.3 mode 0 output.
+You are an independent reviewer for science-mentor v0.2.0 mode 0 output.
 
 CONTEXT
-- skill spec ref: docs/superpowers/specs/2026-05-25-thermal-mentor-v0.1.3-mode-routing-design.md
+- skill spec ref: docs/superpowers/specs/2026-05-25-science-mentor-v0.1.3-mode-routing-design.md
 - mentor payload JSON: <paste from tmp/payload.json>
 - data brief: <paste from tmp/data_brief.json>
 - prior reviewer critiques (Round 2 only): <paste merged Round 1 bundle>
@@ -112,7 +112,7 @@ YOUR JOB
 - Independent critique of the mentor's data-first reasoning.
 - Focus on: anomaly classification correctness, hypothesis enumeration completeness,
   discriminating experiment feasibility, confirmation bias risk.
-- Any DOI / citekey you introduce will be verified via Crossref / OpenAlex / DOI.org HEAD;
+- Any DOI / citekey you introduce will be verified via OpenAlex / Crossref / DOI.org HEAD;
   do not fabricate citations. If unsure, omit the ref and keep the argument.
 
 OUTPUT (write to <tmp/cross_review_round{N}_{reviewer}.json>)

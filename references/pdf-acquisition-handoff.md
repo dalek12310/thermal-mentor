@@ -1,6 +1,6 @@
 # paper-pdf-acquisition handoff protocol
 
-`paper-pdf-acquisition` is an Edge / CARSI / Shibboleth interactive skill — it cannot be called as a Python API. `thermal-mentor` collaborates with it **across sessions** via a manifest CSV + a resume instruction the user runs in a new Claude Code session.
+`paper-pdf-acquisition` is an Edge / CARSI / Shibboleth interactive skill — it cannot be called as a Python API. `science-mentor` collaborates with it **across sessions** via a manifest CSV + a resume instruction the user runs in a new Claude Code session.
 
 ## Why manifest + resume, not inline call
 
@@ -12,7 +12,7 @@ The `paper-pdf-acquisition` skill enforces 5 immutable hard rules:
 4. No Zotero SQLite write without explicit user authorization.
 5. Validate every PDF (header check).
 
-Rules 2-3 require a Chrome DevTools Protocol session piloting a real Edge profile the user authenticated. Embedding that into thermal-mentor's pipeline would either bypass user authentication (rule violation) or block the entire skill on a 30-60 s setup ceremony every invocation. Decision: lazy invoke on demand, **cross-session manifest handoff**.
+Rules 2-3 require a Chrome DevTools Protocol session piloting a real Edge profile the user authenticated. Embedding that into science-mentor's pipeline would either bypass user authentication (rule violation) or block the entire skill on a 30-60 s setup ceremony every invocation. Decision: lazy invoke on demand, **cross-session manifest handoff**.
 
 The handoff is implemented by `paper_pdf_handoff.py` — it writes a manifest CSV and a human-readable resume instruction. It does **not** invoke Edge / CDP / publisher APIs.
 

@@ -5,9 +5,9 @@
 **Tweet 1 (hook)**
 Most "AI research assistants" fail the same way: they ask "what do you want help with?" before looking at your data.
 
-I built thermal-mentor — a Claude Code skill that scans your data FIRST, then asks tailored questions based on what it sees.
+I built science-mentor — a Claude Code skill that scans your data FIRST, then asks tailored questions based on what it sees.
 
-Code + bilingual docs: github.com/dalek12310/thermal-mentor
+Code + bilingual docs: github.com/dalek12310/science-mentor
 
 **Tweet 2 (the pattern)**
 The reflective routing pattern, in 3 steps:
@@ -19,12 +19,12 @@ The reflective routing pattern, in 3 steps:
 Result: ~75% of "what would you like?" friction disappears.
 
 **Tweet 3 (verifier_error semantic)**
-One subtle thing thermal-mentor does that I haven't seen elsewhere:
+One subtle thing science-mentor does that I haven't seen elsewhere:
 
 DOI verification with explicit `verifier_error` ≠ `not_found`.
 
 Most tools silently fall back to "verified" or "unknown" on network errors.
-thermal-mentor returns `verifier_error` so citation_validity_rate isn't polluted by infra failures.
+science-mentor returns `verifier_error` so citation_validity_rate isn't polluted by infra failures.
 
 **Tweet 4 (cross-review)**
 Round-table cross-review with non-discriminatory DOI attribution:
@@ -36,14 +36,14 @@ Round 3-4: Python merges via classify_findings + attribute_refs.
 No reviewer-discrimination in citation provenance.
 
 **Tweet 5 (CTA)**
-v0.1.3 ships with:
-- 64 unit tests
+v0.2.0 ships with:
+- 77 unit tests
 - Bilingual English + 简体中文 docs (1000+ line manual each)
 - MIT license
 - Self-contained (no corpus needed for mode 0)
 
 If you do data-heavy research + use Claude Code, give it a spin:
-github.com/dalek12310/thermal-mentor
+github.com/dalek12310/science-mentor
 
 ---
 
@@ -52,34 +52,34 @@ github.com/dalek12310/thermal-mentor
 For submission to awesome lists like https://github.com/topics/claude-code-skill:
 
 ```markdown
-### thermal-mentor
+### science-mentor
 
-[github.com/dalek12310/thermal-mentor](https://github.com/dalek12310/thermal-mentor) — Research mentor skill that scans your data BEFORE asking what you want. Mode 0 pipeline: anomaly enumeration → hypothesis enumeration → discriminating experiment proposal. DOI multi-source verification with explicit verifier_error semantic. Round-table cross-review with non-discriminatory DOI attribution. Bilingual EN + 简体中文 docs. MIT.
+[github.com/dalek12310/science-mentor](https://github.com/dalek12310/science-mentor) — Research mentor skill that scans your data BEFORE asking what you want. Mode 0 pipeline: anomaly enumeration → hypothesis enumeration → discriminating experiment proposal. DOI multi-source verification with explicit verifier_error semantic. Round-table cross-review with non-discriminatory DOI attribution. Bilingual EN + 简体中文 docs. MIT.
 ```
 
 ---
 
 ## Hacker News submission text
 
-**Title**: thermal-mentor: a Claude Code skill that scans your research data before asking what you want
+**Title**: science-mentor: a Claude Code skill that scans your research data before asking what you want
 
 **Body** (post in comments):
 
 I built this because I kept getting the same useless response from LLM research assistants: generic encouragement or generic critique that ignored my actual data.
 
-thermal-mentor flips the order: it scans your current working directory (manuscripts, CSV data, text notes) into a JSON scaffold, then the mentor session (the LLM you're chatting with) enriches the scaffold with candidate anomalies — places where your measurements contradict textbook predictions. THEN it asks you what you want to do, with tailored options based on what it actually found.
+science-mentor flips the order: it scans your current working directory (manuscripts, CSV data, text notes) into a JSON scaffold, then the mentor session (the LLM you're chatting with) enriches the scaffold with candidate anomalies — places where your measurements contradict textbook predictions. THEN it asks you what you want to do, with tailored options based on what it actually found.
 
 Two technical bits I haven't seen elsewhere:
 
-1. **DOI multi-source verification with explicit verifier_error semantic**. Most DOI checkers silently map network failures to "verified" or "unknown". thermal-mentor returns `verifier_error` distinctly so your citation_validity_rate metric isn't polluted by infra problems.
+1. **DOI multi-source verification with explicit verifier_error semantic**. Most DOI checkers silently map network failures to "verified" or "unknown". science-mentor returns `verifier_error` distinctly so your citation_validity_rate metric isn't polluted by infra problems.
 
 2. **Non-discriminatory DOI attribution in cross-review merge**. When 3 reviewer LLMs introduce refs in their critiques, the merge step tracks `introduced_by: reviewer_name` for all of them — no model gets singled out as "high risk" by default. (Technically: first-wins ordering when the same DOI appears from multiple reviewers.)
 
-Bilingual English + 简体中文 docs, 64 unit tests, MIT license. v0.1.3.
+Bilingual English + 简体中文 docs, 77 unit tests, MIT license. v0.2.0.
 
 Feedback welcome — especially on the reflective routing pattern, which I think generalizes beyond science.
 
-github.com/dalek12310/thermal-mentor
+github.com/dalek12310/science-mentor
 
 ---
 
@@ -87,26 +87,26 @@ github.com/dalek12310/thermal-mentor
 
 Most AI research assistants fail the same way: they ask "what would you like help with?" before looking at your data. You end up summarizing your own files back to the assistant, which then gives generic advice based on your summary instead of your actual measurements.
 
-I just released thermal-mentor v0.1.3 — a Claude Code skill that flips the order. It scans your current working directory first (manuscripts, CSV data, notes), surfaces the anomalies it finds with verbatim quotes, then asks tailored intent questions seeded by what it detected.
+I just released science-mentor v0.2.0 — a Claude Code skill that flips the order. It scans your current working directory first (manuscripts, CSV data, notes), surfaces the anomalies it finds with verbatim quotes, then asks tailored intent questions seeded by what it detected.
 
-What's in v0.1.3:
+What's in v0.2.0:
 - Reflective routing protocol (scan-then-ask)
 - Mode 0 data-first pipeline: anomaly enumeration → hypothesis enumeration → discriminating experiment proposal
 - Multi-source DOI verification with explicit verifier_error vs not_found semantic (so network failures don't pollute your citation_validity_rate)
 - Round-table cross-review with non-discriminatory DOI attribution across reviewer LLMs
-- Bilingual EN + 简体中文 docs, 64 unit tests, MIT license
+- Bilingual EN + 简体中文 docs, 77 unit tests, MIT license
 
 Acceptance run on a Ta-doped LLZO study: 9 runs × N=3, target anomaly hit rate = 1.00.
 
 If you do data-heavy research and use Claude Code, give it a try. Feedback especially welcome on the reflective routing pattern — I think it generalizes well beyond science.
 
-github.com/dalek12310/thermal-mentor
+github.com/dalek12310/science-mentor
 
 ---
 
 ## Reddit r/ClaudeAI submission
 
-**Title**: thermal-mentor v0.1.3 — Claude Code skill for data-first research mentor sessions [MIT, EN+CN docs]
+**Title**: science-mentor v0.2.0 — Claude Code skill for data-first research mentor sessions [MIT, EN+CN docs]
 
 **Body**:
 
@@ -127,9 +127,9 @@ Other bits worth highlighting:
 - Reproducibility lock via `data_brief_hash` (same scanner input → same hash)
 - N=3 acceptance machinery built in
 
-Stack: Python 3.10+, MIT, 64 unit tests, CI on Ubuntu + Windows × Py 3.10-3.13.
+Stack: Python 3.10+, MIT, 77 unit tests, CI on Ubuntu + Windows × Py 3.10-3.13.
 
-Repo: github.com/dalek12310/thermal-mentor
+Repo: github.com/dalek12310/science-mentor
 
 Docs are bilingual (English + 简体中文). 5-step DEMO walkthrough included with a synthetic LLZO dataset so you can try mode 0 without needing your own data.
 
@@ -151,7 +151,7 @@ Feedback / PRs welcome.
 
 ## Notes for poster
 
-- Repo URLs already point to `dalek12310/thermal-mentor`; update them only if you publish under a different account.
+- Repo URLs already point to `dalek12310/science-mentor`; update them only if you publish under a different account.
 - Tweet thread is sized for X's 280-char limit per tweet; check character counts before posting (Tweet 1 is ~270 chars).
 - HN submission: post the title + URL only; put the body text in the first comment, not the submission itself.
 - LinkedIn version benefits from a screenshot of the demo dataset trend detection output as a visual.

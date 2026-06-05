@@ -1,6 +1,6 @@
-# thermal-mentor — User Manual
+# science-mentor — User Manual
 
-> Full user guide for thermal-mentor v0.1.3.
+> Full user guide for science-mentor v0.2.0.
 > For a quick overview, see [README.md](../README.md). Chinese version: [MANUAL_zh-CN.md](MANUAL_zh-CN.md).
 
 ## Table of Contents
@@ -24,7 +24,7 @@
 
 ## 1. Conceptual Overview
 
-`thermal-mentor` is a **research mentor in a box**. It is designed for one specific moment:
+`science-mentor` is a **research mentor in a box**. It is designed for one specific moment:
 
 - You have raw experimental data and a draft manuscript.
 - You are uncertain whether your data tells a Nature-Materials-level story or just a routine paper.
@@ -35,11 +35,11 @@ Most LLM "research assistants" exhibit one of two failure modes:
 - **Generic encouragement** ("This looks like a great paper!") — useless.
 - **Generic critique** ("Cite more papers, tighten the discussion") — also useless.
 
-`thermal-mentor` tries to do something different: **start from your data**, find the places where your measurements contradict textbook predictions, and reason forward from there.
+`science-mentor` tries to do something different: **start from your data**, find the places where your measurements contradict textbook predictions, and reason forward from there.
 
 ### 1.1 The reflective routing pattern
 
-Most skills jump straight to "what do you want me to do?" — but the user's stated question often misses the most surprising thing in their data. `thermal-mentor` first scans the data, builds inferred-intent options based on what it sees, *then* asks — giving you the chance to either confirm or redirect.
+Most skills jump straight to "what do you want me to do?" — but the user's stated question often misses the most surprising thing in their data. `science-mentor` first scans the data, builds inferred-intent options based on what it sees, *then* asks — giving you the chance to either confirm or redirect.
 
 This is documented in `references/data-first-prompts.md` (the Step 1 inner-monologue rubric).
 
@@ -47,7 +47,7 @@ This is documented in `references/data-first-prompts.md` (the Step 1 inner-monol
 
 ```
                     +------------------+
-                    |  /thermal-mentor |
+                    |  /science-mentor |
                     +--------+---------+
                              |
                 +------------+------------+
@@ -63,7 +63,7 @@ This is documented in `references/data-first-prompts.md` (the Step 1 inner-monol
         +-----------+ +-------------+ +----------+
 ```
 
-- **Mode 0 (data-first)**: anomaly enumeration -> hypothesis enumeration -> discriminating experiments. Materials-science-domain-agnostic.
+- **Mode 0 (data-first)**: anomaly enumeration -> hypothesis enumeration -> discriminating experiments. The mode-0 kernel carries no domain logic (physics/materials-first today, mechanism-general — other fields need a domain pack).
 - **Publication-strategy**: novelty review / highlight / revision / direction / corpus query. Original v0.1 pipeline.
 - **Both**: mode 0 first, then publication strategy reads `mode_0_handover` from the mode 0 payload and pre-fills its Level-2 ask.
 
@@ -100,27 +100,27 @@ The skill is designed to be cloned directly into the Claude skills directory:
 
 ```bash
 # Linux / macOS
-git clone https://github.com/dalek12310/thermal-mentor.git ~/.claude/skills/thermal-mentor
+git clone https://github.com/dalek12310/science-mentor.git ~/.claude/skills/science-mentor
 
 # Windows (PowerShell)
-git clone https://github.com/dalek12310/thermal-mentor.git $env:USERPROFILE\.claude\skills\thermal-mentor
+git clone https://github.com/dalek12310/science-mentor.git $env:USERPROFILE\.claude\skills\science-mentor
 ```
 
-Restart Claude Code; the skill picks up on `/thermal-mentor` invocations.
+Restart Claude Code; the skill picks up on `/science-mentor` invocations.
 
 To verify install:
 
 ```bash
-ls ~/.claude/skills/thermal-mentor/SKILL.md  # should exist
+ls ~/.claude/skills/science-mentor/SKILL.md  # should exist
 ```
 
-### 2.2 As a Python library
+### 2.2 As Python scripts / CLI tools
 
-For CLI usage or testing, install editable:
+For CLI usage or testing from the checkout, install editable:
 
 ```bash
-git clone https://github.com/dalek12310/thermal-mentor.git
-cd thermal-mentor
+git clone https://github.com/dalek12310/science-mentor.git
+cd science-mentor
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -e .
@@ -136,13 +136,13 @@ Requires Python >= 3.10. Tested on 3.10 / 3.11 / 3.12 / 3.13.
 pytest tests/ -v
 ```
 
-Expected: `64 passed in <time>`.
+Expected: `77 passed in <time>`.
 
 If tests fail:
 
 - Check Python version (`python --version`).
 - Check `pip install -e .` succeeded without warnings.
-- Make sure no environment variables leaked from another project; in particular, `unset THERMAL_MENTOR_CORPUS` if it points to a nonexistent directory.
+- Make sure no environment variables leaked from another project; in particular, `unset SCIENCE_MENTOR_CORPUS` if it points to a nonexistent directory.
 - Make sure `tests/` and `scripts/` are both on `sys.path`. The `conftest.py` handles this for pytest, but ad-hoc Python invocations should add `scripts/` explicitly.
 
 ---
@@ -161,7 +161,7 @@ export OPENALEX_MAILTO="you@example.com"
 
 Without it, requests use the anonymous pool: slower, more 429s, occasional cold-start delay. The skill still works but DOI verification can take several seconds longer per ref.
 
-### 3.2 `THERMAL_MENTOR_CORPUS`
+### 3.2 `SCIENCE_MENTOR_CORPUS`
 
 Path to a directory containing a local citation corpus. The corpus directory is expected to have at least:
 
@@ -169,7 +169,7 @@ Path to a directory containing a local citation corpus. The corpus directory is 
 - `retraction_blacklist.yaml` — list of retracted citekeys/DOIs the verifier refuses to verify.
 
 ```bash
-export THERMAL_MENTOR_CORPUS="/path/to/your/local/corpus"
+export SCIENCE_MENTOR_CORPUS="/path/to/your/local/corpus"
 ```
 
 Unset: publication-mode local citekey lookups return `not_found`; the verifier falls back to DOI multi-source. Mode 0 does not use the corpus (it is data-driven, not citation-driven), so it is unaffected.
@@ -214,7 +214,7 @@ and source it (`set -a; . ./.env; set +a` in bash, `Get-Content .env | ForEach-O
 In any Claude Code session, type:
 
 ```
-/thermal-mentor
+/science-mentor
 ```
 
 The skill activates, then immediately runs Step 0 (deterministic scan of your current working directory).
@@ -232,7 +232,7 @@ If the CWD has zero supported files, the skill falls back to a Level-3 input sou
 A typical session looks like this:
 
 ```
-You: /thermal-mentor
+You: /science-mentor
 
 Mentor: [silent scan happens]
         基于以上数据, 你想让我做什么?
@@ -308,7 +308,7 @@ python scripts/anomaly_brief.py /path/to/data --out tmp/data_brief.json --includ
 - `--out` — output JSON path. Default `tmp/data_brief.json`.
 - `--include-text` — include extracted text from `.docx`/`.pdf`/`.md`/`.txt` files (the CLI scaffold path; the full anomaly extraction happens in the mentor session).
 
-The CLI mode writes a *scaffold* — fields like `central_claims`, `candidate_anomalies`, `materials_system`, `manuscript_stage` are left empty for the mentor (LLM) to fill. The `data_brief_hash` is computed over the scanner-determined invariants only, so the scaffold and the mentor-enriched brief share the same hash for the same input snapshot.
+The CLI mode writes a *scaffold* — fields like `central_claims`, `candidate_anomalies`, `study_system`, `manuscript_stage` are left empty for the mentor (LLM) to fill. The `data_brief_hash` is computed over the scanner-determined invariants only, so the scaffold and the mentor-enriched brief share the same hash for the same input snapshot.
 
 ### 5.2 `scripts/verifier.py`
 
@@ -323,11 +323,15 @@ Dispatches on `payload["mode"]`:
 - `data_first` -> `verify_mode_0`: checks `data_evidence` source file existence + DOI multi-source for each hypothesis ref.
 - `novelty_review` / `highlight_mining` / `revision` / `direction_guidance` / `corpus_query` -> `verify_payload`: full publication-mode verifier including local citekey lookups, retraction blacklist, anchor registry cross-checks.
 
-Outputs verified-payload JSON to stdout. Pipe to a file:
+By default outputs the **rendered Markdown** to stdout (what the user sees). To get the
+**verified payload JSON** instead (e.g. to feed `run_acceptance.py`), add `--json`:
 
 ```bash
-python scripts/verifier.py tmp/payload.json > tmp/payload.verified.json
+python scripts/verifier.py tmp/payload.json --json > tmp/payload.verified.json
 ```
+
+(`run_acceptance.save_run` also re-verifies internally before persisting, so the saved
+JSON/Markdown always reflect verification even if you skip this step.)
 
 The Markdown rendering (`verifier.render_markdown` / `verifier.render_markdown_mode_0`) is exposed as Python API but is also invoked by `run_acceptance.save_run`.
 
@@ -359,7 +363,7 @@ For N=1, output filename is `<run_name>_<YYYYMMDD>.json` / `.md`. For N>1, outpu
     "sampler_temperature": "<from $CLAUDE_TEMPERATURE>",
     "data_brief_hash": "<from --reproducibility-manifest>",
     "system_prompt_hash": "<sha256(SKILL.md)[:16]>",
-    "pipeline_version": "0.1.3",
+    "pipeline_version": "0.2.0",
     "run_name": "<--run-name>"
   }
 }
@@ -448,7 +452,7 @@ Promotes `candidate_anomalies` from `data_brief.json` to the formal 6-field sche
 {
   "anomaly_id": "A1",
   "observation": "Across 0/2/4/6 mol% dopant series, the defect signal (XPS O1s + EPR) decreases monotonically",
-  "expected_textbook": "Aliovalent substitution textbook: trivalent dopant on tetravalent site should net-increase defects to maintain charge balance",
+  "expected_from_prior_knowledge": "Aliovalent substitution textbook: trivalent dopant on tetravalent site should net-increase defects to maintain charge balance",
   "surprise_score": "high",
   "data_evidence": [
     {
@@ -483,11 +487,13 @@ Notice the option labels: **no "推荐" tag**, only neutral trade-offs. This is 
 Only runs if Step C user picked "先帮我查文献" or "两阶段并行".
 
 ```bash
-# L1 (local corpus hybrid retrieve) — only if THERMAL_MENTOR_CORPUS is set
-python ~/.claude/skills/thermal-mentor/scripts/hybrid_retrieve.py "<anomaly observation>" --top-k 5
+# L1 (local corpus hybrid retrieve) — only if the corpus bundle script exists
+if [ -n "$SCIENCE_MENTOR_CORPUS" ] && [ -f ~/.claude/skills/science-mentor/scripts/hybrid_retrieve.py ]; then
+  python ~/.claude/skills/science-mentor/scripts/hybrid_retrieve.py "<anomaly observation>" --top-k 5
+fi
 
 # L3 (live academic search)
-python ~/.claude/skills/thermal-mentor/scripts/live_search.py "<anomaly observation>" --since 2018-01-01 --top-k 10
+python ~/.claude/skills/science-mentor/scripts/live_search.py "<anomaly observation>" --since 2018-01-01 --top-k 10
 ```
 
 Annotates each anomaly with `prior_art_hits`.
@@ -547,7 +553,7 @@ If user picks reviewers, mentor uses the `Agent` tool to spawn them in parallel.
 ### 6.8 Step G — verifier
 
 ```bash
-python ~/.claude/skills/thermal-mentor/scripts/verifier.py tmp/payload.json
+python ~/.claude/skills/science-mentor/scripts/verifier.py tmp/payload.json
 ```
 
 Mode 0 verifier checks:
@@ -559,7 +565,7 @@ Mode 0 verifier checks:
 ### 6.9 Step H — render + audit log + acceptance save
 
 ```bash
-python ~/.claude/skills/thermal-mentor/scripts/run_acceptance.py \
+python ~/.claude/skills/science-mentor/scripts/run_acceptance.py \
     tmp/payload.json --mode data_first \
     --reproducibility-manifest tmp/data_brief.json \
     --run-name "<task>_v0.1.3_data_first_<date>_runN"
@@ -713,17 +719,18 @@ Per Section 4.4.3 of the design spec:
 **4 always-on sources** (OpenAlex, Crossref, Semantic Scholar, DOI.org HEAD) **+ 2 env-gated sources** (Lens.org via `LENS_API_TOKEN`, Web of Science via `WOS_API_KEY`):
 
 ```
-OpenAlex (qps=10)  -> Crossref (qps=50, AUTHORITATIVE)  -> Semantic Scholar (qps=1)
-                   -> [Lens.org if LENS_API_TOKEN]      -> [WoS if WOS_API_KEY]
-                   -> DOI.org HEAD (AUTHORITATIVE)
+OpenAlex (qps=10)  -> Crossref (qps=50)              -> Semantic Scholar (qps=1)
+                   -> [Lens.org if LENS_API_TOKEN]   -> [WoS if WOS_API_KEY]
+                   -> DOI.org HEAD (AUTHORITATIVE for absence)
 ```
 
 Source order is fixed; `_build_chain` only inserts Lens / WoS conditionally based on env vars.
 
 ### 9.2 Semantics
 
-- **Non-authoritative source `not_found`**: continue fallback (could be a metadata indexing gap).
-- **Authoritative source (Crossref or DOI.org HEAD) `not_found`**: confirmed absence; chain terminates with `status=not_found`.
+- **Any source `found`**: return `verified` immediately, with that source as the attribution.
+- **Non-authoritative source `not_found`**: continue fallback. This includes **Crossref** — a positive Crossref hit proves existence, but a Crossref miss does **not** prove absence, because Crossref does not index DataCite/Zenodo/mEDRA DOIs. So a Crossref miss only continues the chain.
+- **DOI.org HEAD `not_found`** (the only authority for *absence* — it resolves every registration agency): confirmed absence; chain terminates with `status=not_found`.
 - **Any source `verified`**: return immediately with that source as the attribution.
 - **All sources raise HTTPError / TimeoutException**: return `status=verifier_error` with the accumulated error list in `error_detail.all_sources_failed`.
 
@@ -758,7 +765,7 @@ The publication-mode `verifier.py` has a `LegacyDoiAdapter` that wraps `verify_d
 4. No Zotero SQLite write without explicit user authorization.
 5. Validate every PDF (header check).
 
-Rules 2-3 require a Chrome DevTools Protocol session piloting a real Edge profile the user has authenticated. Embedding that into thermal-mentor would either bypass user authentication (rule violation) or block every invocation on a 30-60s setup ceremony. Decision: lazy invoke on demand, **cross-session manifest handoff**.
+Rules 2-3 require a Chrome DevTools Protocol session piloting a real Edge profile the user has authenticated. Embedding that into science-mentor would either bypass user authentication (rule violation) or block every invocation on a 30-60s setup ceremony. Decision: lazy invoke on demand, **cross-session manifest handoff**.
 
 ### 10.2 T1 / T2 / T3 trigger conditions
 
@@ -828,7 +835,7 @@ If some DOIs come back `unresolved`, mentor adjusts hypotheses based on partial 
 HASH_PAYLOAD_KEYS = ("files_found", "scanner_manifest", "csv_summaries", "text_files_content")
 ```
 
-LLM-enriched fields (`central_claims`, `performance_numbers`, `candidate_anomalies`, `materials_system`, `manuscript_stage`) are **excluded**. They are non-deterministic given the same input, and model-side reproducibility is captured separately via `reproducibility.model_id` / `system_prompt_hash`.
+LLM-enriched fields (`central_claims`, `performance_numbers`, `candidate_anomalies`, `study_system`, `manuscript_stage`) are **excluded**. They are non-deterministic given the same input, and model-side reproducibility is captured separately via `reproducibility.model_id` / `system_prompt_hash`.
 
 Why this matters: this guarantee allows the CLI scaffold path (`build_data_brief_scaffold`, deterministic) and the mentor session full pipeline (`build_data_brief`, includes LLM enrichment) to produce the same `data_brief_hash` for the same cwd snapshot. Multiple acceptance runs against the same data lock identically.
 
@@ -846,13 +853,13 @@ Why this matters: this guarantee allows the CLI scaffold path (`build_data_brief
     "sampler_temperature": "<from $CLAUDE_TEMPERATURE, default 'default'>",
     "data_brief_hash": "<from --reproducibility-manifest>",
     "system_prompt_hash": "<sha256(SKILL.md)[:16]>",
-    "pipeline_version": "0.1.3",
+    "pipeline_version": "0.2.0",
     "run_name": "<--run-name>"
   }
 }
 ```
 
-`system_prompt_hash` is computed from `SKILL.md` (either repo-local or installed at `~/.claude/skills/thermal-mentor/SKILL.md`). Fallback sentinel: `"skill_md_not_found"`.
+`system_prompt_hash` is computed from `SKILL.md` (either repo-local or installed at `~/.claude/skills/science-mentor/SKILL.md`). Fallback sentinel: `"skill_md_not_found"`.
 
 ### 11.3 N=3 stability testing
 
@@ -905,14 +912,14 @@ Full schemas live in `references/output-schemas.md` (publication modes) and `ref
   "candidate_anomalies": [
     {"anomaly_id": "A1", "observation_short": "...",
      "observed_trend": "monotonic_decrease|monotonic_increase|non_monotonic|unknown",
-     "expected_source_type": "defect-chemistry textbook|Shannon radii|...",
+     "expectation_basis": "defect-chemistry textbook|Shannon radii|...",
      "quote_verbatim": "...", "quote_source": "notes.txt:7",
      "quote_hash": "sha256:...",
-     "expected_textbook_short": "...",
+     "expected_from_prior_knowledge_short": "...",
      "mentor_inference": "...",
      "surprise_score": "high|medium|low"}
   ],
-  "materials_system": "doped oxide series",
+  "study_system": "doped oxide series",
   "manuscript_stage": "draft|plan|data-only|mixed",
   "data_brief_hash": "sha256:...",
   "scanner_manifest": {
@@ -975,7 +982,7 @@ When mode 0 finishes in `both` mode, the payload carries a top-level `mode_0_han
     "mechanism_claim_candidates": ["..."],
     "selling_point_candidates": ["..."],
     "existing_data_assets": ["..."],
-    "materials_system": "...",
+    "study_system": "...",
     "data_brief_hash": "sha256:..."
   }
 }
@@ -994,11 +1001,11 @@ Publication mode reads it and pre-fills Level-2 `AskUserQuestion` option descrip
 - `UnicodeDecodeError` on CSV — file is GB18030 or other non-UTF-8. `summarize_csv` tries fallback encodings (UTF-8 -> GB18030 -> Latin-1) automatically.
 - `_llm_extract_anomalies NotImplementedError` — you called `build_data_brief` directly. Use `build_data_brief_scaffold` for CLI scenarios; the full path is for the mentor session only.
 
-### 13.2 Skill does not activate on `/thermal-mentor`
+### 13.2 Skill does not activate on `/science-mentor`
 
-- Check `ls ~/.claude/skills/thermal-mentor/SKILL.md` exists.
+- Check `ls ~/.claude/skills/science-mentor/SKILL.md` exists.
 - Restart Claude Code (the skills registry is loaded at session start).
-- Check that `SKILL.md` frontmatter has `name: thermal-mentor` (case-sensitive).
+- Check that `SKILL.md` frontmatter has `name: science-mentor` (case-sensitive).
 
 ### 13.3 DOI verification stuck on a single DOI
 
@@ -1078,6 +1085,20 @@ If you fork this and want to rename:
 3. Update slash-command references in `references/*.md` and `docs/MANUAL*.md`.
 4. Update Python import paths if you renamed `scripts/` -> something else.
 
+### 14.5 Adding a domain pack (using the tool in another field)
+
+The kernel is domain-general; field-specific vocabulary lives in `domains/`. To target a new field:
+
+1. Copy `domains/_template.md` to `domains/<your-field>.md`.
+2. Fill the four slots: `research_directions`, `target_journals`, `preserved_terms`,
+   `expectation_vocabulary`.
+3. At session start, set `MENTOR_DOMAIN_PACK=<your-field>` (or tell the mentor "use the
+   `<your-field>` domain pack").
+
+No code changes are needed — a pack is data, not logic. The shipped `domains/thermal.md` is the
+reference pack; `domains/_template.md` includes worked biology and economics examples showing the
+anomaly → hypothesis → discriminating-experiment loop is field-agnostic. See `domains/README.md`.
+
 ---
 
-*Manual last updated for v0.1.3.*
+*Manual last updated for v0.2.0.*

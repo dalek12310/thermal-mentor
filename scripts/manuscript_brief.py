@@ -58,8 +58,8 @@ def merge_chunk_briefs(per_chunk_briefs: list[dict[str, Any]]) -> dict[str, Any]
                 merged[k].extend(v)
             elif v:
                 merged[k].append(v)
-        if b.get("materials_system"):
-            materials.append(b["materials_system"])
+        if b.get("study_system"):
+            materials.append(b["study_system"])
     for k in merged:
         seen = set()
         unique = []
@@ -69,15 +69,15 @@ def merge_chunk_briefs(per_chunk_briefs: list[dict[str, Any]]) -> dict[str, Any]
                 seen.add(key)
                 unique.append(item)
         merged[k] = unique
-    merged["materials_system"] = " | ".join(sorted(set(materials))) if materials else ""
+    merged["study_system"] = " | ".join(sorted(set(materials))) if materials else ""
     return merged
 
 
 def brief_to_markdown(brief: dict[str, Any]) -> str:
     """Compact markdown rendering for the mentor prompt."""
     lines = ["# Manuscript brief\n"]
-    if brief.get("materials_system"):
-        lines.append(f"**Materials system**: {brief['materials_system']}\n")
+    if brief.get("study_system"):
+        lines.append(f"**Study system**: {brief['study_system']}\n")
     for label, key in (
         ("Central claims", "central_claims"),
         ("Method claims", "method_claims"),
@@ -98,3 +98,52 @@ def brief_to_markdown(brief: dict[str, Any]) -> str:
             lines.append(f"  > {quote}"[:500])
         lines.append("")
     return "\n".join(lines)
+
+
+def build_manuscript_scaffold(path: Path) -> dict[str, Any]:
+    """Read a manuscript file into a scaffold brief (text + chunks).
+
+    Like ``anomaly_brief``'s scanner half, this is the deterministic part: it
+    extracts text and splits it into chunks. The LLM-enriched fields
+    (central_claims / method_claims / ...) are left empty for the mentor session
+    to fill (it cannot be done in a Python subprocess).
+    """
+    path = Path(path)
+    text = read_text(path)
+    return {
+        "source": str(path),
+        "text": text,
+        "chunks": split_into_chunks(text),
+        "central_claims": [],
+        "method_claims": [],
+        "performance_claims": [],
+        "citations_used": [],
+        "evidence_spans": [],
+        "study_system": "",
+    }
+
+
+def main() -> None:
+    import argparse
+    import json
+    import sys
+    p = argparse.ArgumentParser(description="Extract a manuscript brief scaffold (text + chunks).")
+    p.add_argument("path", help="manuscript file (.md/.txt/.docx/.pdf)")
+    p.add_argument("--out", default="tmp/brief.json", help="output JSON path")
+    args = p.parse_args()
+    brief = build_manuscript_scaffold(Path(args.path))
+    out_path = Path(args.out)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+    reconfigure = getattr(sys.stdout, "reconfigure", None)
+    if callable(reconfigure):
+        try:
+            reconfigure(encoding="utf-8")
+        except Exception:
+            pass
+    print(f"[saved] {out_path} (scaffold: {len(brief['chunks'])} chunks; "
+          f"mentor session must fill central_claims/etc.)")
+
+
+if __name__ == "__main__":
+    main()
